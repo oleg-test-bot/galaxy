@@ -28,6 +28,24 @@
             </code>
         </pre>
     </b-card>
+<!--<<<<<<< HEAD-->
+<!--=======-->
+<!--    <div v-else-if="citations.length">-->
+<!--      <b-btn-->
+<!--        v-b-toggle="id"-->
+<!--        variant="primary"-->
+<!--      >Citations</b-btn>-->
+<!--      <b-collapse-->
+<!--        :id="id"-->
+<!--        class="mt-2"-->
+<!--      >-->
+<!--        <b-card>-->
+<!--          <p v-html="formattedReferences"></p>-->
+<!--        </b-card>-->
+<!--      </b-collapse>-->
+<!--    </div>-->
+<!--  </div>-->
+<!--&gt;>>>>>> dbbe505cae... Add infinite scroll, collapsible citations and info modal-->
 </template>
 <script>
 import _ from "underscore";
@@ -61,7 +79,8 @@ export default {
         return {
             citations: [],
             content: "",
-            errors: []
+            errors: [],
+            showCollapse: false
         };
     },
     computed: {
