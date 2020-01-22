@@ -30,6 +30,8 @@ import WorkflowImport from "components/Workflow/WorkflowImport.vue";
 import WorkflowList from "components/Workflow/WorkflowList.vue";
 import HistoryImport from "components/HistoryImport.vue";
 import HistoryView from "components/HistoryView.vue";
+import ToolsView from "components/ToolsView.vue";
+
 import WorkflowInvocationReport from "components/WorkflowInvocationReport.vue";
 import RecentInvocations from "components/User/RecentInvocations.vue";
 import HistoryList from "mvc/history/history-list";
@@ -53,6 +55,7 @@ export const getAnalysisRouter = Galaxy =>
         routes: {
             "(/)(#)(_=_)": "home",
             "(/)root*": "home",
+            "(/)tools/view": "show_tools_view",
             "(/)tours(/)(:tour_id)": "show_tours",
             "(/)user(/)": "show_user",
             "(/)user(/)cloud_auth": "show_cloud_auth",

@@ -1,5 +1,6 @@
 <template>
-    <b-card>
+    <div>
+    <b-card  v-if="!simple">
         <template v-slot:header>
             <h4 class="mb-0">
                 Citations
@@ -28,24 +29,21 @@
             </code>
         </pre>
     </b-card>
-<!--<<<<<<< HEAD-->
-<!--=======-->
-<!--    <div v-else-if="citations.length">-->
-<!--      <b-btn-->
-<!--        v-b-toggle="id"-->
-<!--        variant="primary"-->
-<!--      >Citations</b-btn>-->
-<!--      <b-collapse-->
-<!--        :id="id"-->
-<!--        class="mt-2"-->
-<!--      >-->
-<!--        <b-card>-->
-<!--          <p v-html="formattedReferences"></p>-->
-<!--        </b-card>-->
-<!--      </b-collapse>-->
-<!--    </div>-->
-<!--  </div>-->
-<!--&gt;>>>>>> dbbe505cae... Add infinite scroll, collapsible citations and info modal-->
+    <div v-else-if="citations.length">
+      <b-btn
+        v-b-toggle="id"
+        variant="primary"
+      >Citations</b-btn>
+      <b-collapse
+        :id="id"
+        class="mt-2"
+      >
+        <b-card>
+          <p v-html="formattedReferences"></p>
+        </b-card>
+      </b-collapse>
+    </div>
+  </div>
 </template>
 <script>
 import _ from "underscore";
@@ -73,6 +71,11 @@ export default {
             type: Boolean,
             requried: false,
             default: true
+        },
+        simple: {
+            type: Boolean,
+            required: false,
+            default: false
         }
     },
     data() {
