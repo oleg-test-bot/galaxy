@@ -75,9 +75,19 @@ or
 GALAXY_TEST_SELENIUM_HEADLESS=0 nosetests lib/galaxy_test/selenium/test_workflow_editor.py:WorkflowEditorTestCase.test_data_input
 ```
 
-###### Pseudo-element
+#### Interact with  Pseudo-element
 
-clicking on pseudo-element might be tricky. Example [#1](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94) and 
+Clicking on pseudo-element might be tricky. Example [#1](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94) and 
 [#2](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94). Sometimes it's hard to find correct offset, you can use ```contextClick()```
 to check, if your assumption is correct.
- Relevent [stackoverflow answer](https://stackoverflow.com/questions/45427223/click-on-pseudo-element-using-selenium/46557381#46557381) 
+ Relevent [stackoverflow answer](https://stackoverflow.com/questions/45427223/click-on-pseudo-element-using-selenium/46557381#46557381)
+ 
+#### Find optimal XPath or CSS selector
+
+Sometimes it's quite changing to find proper concise selector. Reading [tutorials](https://medium.com/dataflow-kit/css-selectors-vs-xpath-f368b431c9dc)
+will definitely will help development, alongside with [firefox](https://addons.mozilla.org/en-US/firefox/addon/try-xpath/) / [chrome](https://chrome.google.com/webstore/detail/xpath-finder/ihnknokegkbpmofmafnkoadfjkhlogph?hl=en) 
+plugins
+
+#### Running nose with test-tools
+// TODO
+// specify ```test/functional/tools/``` in ```tool_conf.xml```
