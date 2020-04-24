@@ -54,6 +54,7 @@ which can be accessed with ```self.components.{{selector_name}}```
 
 #### Visualization
 We definitely want see how our test progresses and whether it pressed the right button.
+
 ###### Screenshots
 
 This requires GALAXY_TEST_ERRORS_DIRECTORY directory to be defined. Could be used just as:
@@ -74,3 +75,9 @@ or
 GALAXY_TEST_SELENIUM_HEADLESS=0 nosetests lib/galaxy_test/selenium/test_workflow_editor.py:WorkflowEditorTestCase.test_data_input
 ```
 
+###### Pseudo-element
+
+clicking on pseudo-element might be tricky. Example [#1](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94) and 
+[#2](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94). Sometimes it's hard to find correct offset, you can use ```contextClick()```
+to check, if your assumption is correct.
+ Relevent [stackoverflow answer](https://stackoverflow.com/questions/45427223/click-on-pseudo-element-using-selenium/46557381#46557381) 
