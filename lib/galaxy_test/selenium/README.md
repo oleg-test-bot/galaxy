@@ -1,5 +1,5 @@
 [Selenium](https://selenium-python.readthedocs.io/) is performing full-stack Galaxy testing. 
-All tests are implemented using Python and running using [nosetests](https://nose.readthedocs.io/en/latest/).
+All tests are implemented using Python and being started using [nosetests](https://nose.readthedocs.io/en/latest/).
 We replicate desired Galaxy behavior by parsing [DOM](https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Introduction)
 using XPath or CSS selectors
  
@@ -18,7 +18,7 @@ Run specific selenium test
 ## Development tips
 
 #### nosetests
-Obviously, it's quite tedious to always run ```./run_tests.sh -selenium ``` while implementing new great test. 
+Obviously, it's quite tedious to always run ```./run_tests.sh -selenium ``` while implementing another great test. 
 Thus it's highly advised to use ```nosetests``` against already running galaxy server.  
 To make it work, the developer will need to start galaxy first:
 
@@ -53,7 +53,7 @@ so we can reuse them in future. It will create new [Smart Component](https://git
 which can be accessed with ```self.components.{{selector_name}}```
 
 #### Visualization
-We definitely want see how our test progresses and whether it pressed the right button.
+Usually, it is expertly useful to see how the test progresses and whether it pressed the right button.
 
 ###### Screenshots
 
@@ -61,10 +61,11 @@ This requires GALAXY_TEST_ERRORS_DIRECTORY directory to be defined. Could be use
 ```
 GALAXY_TEST_ERRORS_DIRECTORY=~/galaxy/test-dir nosetests lib/galaxy_test/selenium/test_workflow_editor.py
 ```
+Screenshot can be created with ```self.screenshot("workflow_run_nested_collapsed")```
 ###### Non-headless
 
 You can run selenium test just in your browser. Please install https://github.com/mozilla/geckodriver or 
-https://sites.google.com/a/chromium.org/chromedriver/. Then run:
+https://sites.google.com/a/chromium.org/chromedriver. Then run:
 ```
 GALAXY_TEST_SELENIUM_HEADLESS=0 ./run_tests.sh
 ```
@@ -78,13 +79,14 @@ GALAXY_TEST_SELENIUM_HEADLESS=0 nosetests lib/galaxy_test/selenium/test_workflow
 #### Interact with  Pseudo-element
 
 Clicking on pseudo-element might be tricky. Example [#1](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94) and 
-[#2](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94). Sometimes it's hard to find correct offset, you can use ```contextClick()```
+[#2](https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94https://github.com/galaxyproject/galaxy/pull/9618/files#diff-4f3bb5eeab58236fac89f79e4b5e6c4eR94). 
+If you struggle to find correct offset, you can use ```contextClick()```
 to check, if your assumption is correct.
  Relevent [stackoverflow answer](https://stackoverflow.com/questions/45427223/click-on-pseudo-element-using-selenium/46557381#46557381)
  
 #### Find optimal XPath or CSS selector
 
-Sometimes it's quite changing to find proper concise selector. Reading [tutorials](https://medium.com/dataflow-kit/css-selectors-vs-xpath-f368b431c9dc)
+It can be quite changing to find proper concise selector. Reading [tutorials](https://medium.com/dataflow-kit/css-selectors-vs-xpath-f368b431c9dc)
 will definitely will help development, alongside with [firefox](https://addons.mozilla.org/en-US/firefox/addon/try-xpath/) / [chrome](https://chrome.google.com/webstore/detail/xpath-finder/ihnknokegkbpmofmafnkoadfjkhlogph?hl=en) 
 plugins
 
