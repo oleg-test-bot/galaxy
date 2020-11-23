@@ -45,16 +45,31 @@
                         <span v-if="requirement.version"> (Version {{ requirement.version }}) </span>
                     </div>
                 </div>
-                <div class="metadata-section">
+                <div class="metadata-section" v-if="license">
                     <span class="metadata-key">License:</span>
-                    <License v-if="license" :licenseId="license" />
+                    <License :licenseId="license" />
                 </div>
                 <div v-if="xrefs && xrefs.length > 0" class="metadata-section">
                     <span class="metadata-key">References:</span>
                     <div v-for="(xref, index) in xrefs" :key="index">
                         - {{ xref.reftype }}:
                         <template v-if="xref.reftype == 'bio.tools'">
-                            <a :href="`https://bio.tools/${xref.value}`" target="_blank">{{ xref.value }}</a>
+                            {{ xref.value }}
+                            (<a :href="`https://bio.tools/${xref.value}`" target="_blank"
+                                >bio.tools
+                                <font-awesome-icon
+                                    v-b-tooltip.hover
+                                    title="Visit bio.tools reference"
+                                    icon="external-link-alt"
+                                /> </a
+                            >) (<a :href="`https://openebench.bsc.es/tool/${xref.value}`" target="_blank"
+                                >OpenEBench
+                                <font-awesome-icon
+                                    v-b-tooltip.hover
+                                    title="Visit OpenEBench reference"
+                                    icon="external-link-alt"
+                                /> </a
+                            >)
                         </template>
                         <template v-else>
                             {{ xref.value }}
