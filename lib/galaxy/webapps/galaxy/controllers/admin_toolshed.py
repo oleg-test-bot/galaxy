@@ -3,7 +3,6 @@ import logging
 import os
 from functools import wraps
 
-from six import string_types
 from sqlalchemy import or_
 
 import tool_shed.repository_types.util as rt_util
@@ -60,7 +59,7 @@ class AdminToolshed(AdminGalaxy):
             message = 'The <b>%s</b> repository has been activated.' % escape(repository.name)
             status = 'done'
         except Exception as e:
-            error_message = "Error activating repository %s: %s" % (escape(repository.name), unicodify(e))
+            error_message = "Error activating repository {}: {}".format(escape(repository.name), unicodify(e))
             log.exception(error_message)
             message = '%s.<br/>You may be able to resolve this by uninstalling and then reinstalling the repository.  Click <a href="%s">here</a> to uninstall the repository.' \
                 % (error_message, web.url_for(controller='admin_toolshed', action='deactivate_or_uninstall_repository', id=trans.security.encode_id(repository.id)))
@@ -233,7 +232,7 @@ class AdminToolshed(AdminGalaxy):
             raise Exception(message)
         params = dict(name=repository_name, owner=repository_owner, changeset_revision=changeset_revision)
         pathspec = ['repository', 'get_tool_dependencies']
-        raw_text = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+        raw_text = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
         if len(raw_text) > 2:
             encoded_text = json.loads(raw_text)
             text = encoding_util.tool_shed_decode(encoded_text)
@@ -260,7 +259,7 @@ class AdminToolshed(AdminGalaxy):
                       owner=str(repository_owner),
                       changeset_revision=changeset_revision)
         pathspec = ['repository', 'get_updated_repository_information']
-        raw_text = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+        raw_text = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
         repo_information_dict = json.loads(raw_text)
         return repo_information_dict
 
@@ -320,7 +319,7 @@ class AdminToolshed(AdminGalaxy):
                               name=name,
                               owner=owner)
                 pathspec = ['repository', 'get_latest_downloadable_changeset_revision']
-                raw_text = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+                raw_text = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
                 url = util.build_url(tool_shed_url, pathspec=pathspec, params=params)
                 latest_downloadable_revision = json.loads(raw_text)
                 if latest_downloadable_revision == hg_util.INITIAL_CHANGELOG_HASH:
@@ -615,7 +614,7 @@ class AdminToolshed(AdminGalaxy):
                 try:
                     params = dict(name=str(repository.name), owner=str(repository.owner))
                     pathspec = ['repository', 'get_repository_id']
-                    repository_ids = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+                    repository_ids = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
                 except Exception as e:
                     # The Tool Shed cannot handle the get_repository_id request, so the code must be older than the
                     # 04/2014 Galaxy release when it was introduced.  It will be safest to error out and let the
@@ -631,7 +630,7 @@ class AdminToolshed(AdminGalaxy):
             # Get the information necessary to install each repository.
             params = dict(repository_ids=str(repository_ids), changeset_revisions=str(changeset_revisions))
             pathspec = ['repository', 'get_repository_information']
-            raw_text = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+            raw_text = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
             repo_information_dict = json.loads(raw_text)
             for encoded_repo_info_dict in repo_information_dict.get('repo_info_dicts', []):
                 decoded_repo_info_dict = encoding_util.tool_shed_decode(encoded_repo_info_dict)
@@ -917,7 +916,7 @@ class AdminToolshed(AdminGalaxy):
         repo_info_dicts = []
         repo_info_dict = kwd.get('repo_info_dict', None)
         if repo_info_dict:
-            if isinstance(repo_info_dict, string_types):
+            if isinstance(repo_info_dict, str):
                 repo_info_dict = encoding_util.tool_shed_decode(repo_info_dict)
         else:
             # Entering this else block occurs only if the tool_shed_repository does not include any valid tools.
@@ -1061,7 +1060,7 @@ class AdminToolshed(AdminGalaxy):
                               owner=tool_shed_repository.owner,
                               changeset_revision=tool_shed_repository.installed_changeset_revision)
                 pathspec = ['repository', 'get_readme_files']
-                raw_text = util.url_get(tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+                raw_text = util.url_get(tool_shed_url, auth=self.app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
                 readme_files_dict = json.loads(raw_text)
                 tool_dependencies = metadata.get('tool_dependencies', None)
             rdim = repository_dependency_manager.RepositoryDependencyInstallManager(trans.app)
@@ -1203,7 +1202,7 @@ class AdminToolshed(AdminGalaxy):
                 uninstalled, error_message = tool_dependency_util.remove_tool_dependency(trans.app, tool_dependency)
                 if error_message:
                     errors = True
-                    message = '%s  %s' % (message, error_message)
+                    message = f'{message}  {error_message}'
             if errors:
                 message = "Error attempting to uninstall tool dependencies: %s" % message
                 status = 'error'

@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import logging
 
 try:
@@ -10,9 +8,9 @@ except ImportError:
 
 from galaxy.tool_util.verify.interactor import GalaxyInteractorApi, verify_tool
 from galaxy.tools import DataManagerTool
+from galaxy_test.base.env import setup_keep_outdir, target_url_parts
 from galaxy_test.base.instrument import register_job_data
-from galaxy_test.driver.driver_util import setup_keep_outdir, target_url_parts
-from galaxy_test.driver.testcase import FunctionalTestCase
+from galaxy_test.driver.testcase import DrivenFunctionalTestCase
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +20,7 @@ toolbox = None
 TOOL_TYPES_NO_TEST = (DataManagerTool, )
 
 
-class ToolTestCase(FunctionalTestCase):
+class ToolTestCase(DrivenFunctionalTestCase):
     """Abstract test case that runs tests based on a `galaxy.tools.test.ToolTest`."""
 
     def do_it(self, tool_id=None, tool_version=None, test_index=0, resource_parameters={}):

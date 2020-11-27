@@ -1,7 +1,6 @@
 """
 Docker Swarm mode interface
 """
-from __future__ import absolute_import
 
 import logging
 import os.path
@@ -64,7 +63,7 @@ class DockerSwarmInterface(DockerInterface):
     supports_volumes = False
 
     def validate_config(self):
-        super(DockerSwarmInterface, self).validate_config()
+        super().validate_config()
         self._node_prefix = self._conf.node_prefix
 
     def run_in_container(self, command, image=None, **kwopts):
@@ -332,7 +331,7 @@ class DockerSwarmCLIInterface(DockerSwarmInterface, DockerCLIInterface):
 
     @docker_columns
     def service_ps(self, service_id):
-        return self._run_docker(subcommand='service ps', args='--no-trunc {}'.format(service_id))
+        return self._run_docker(subcommand='service ps', args=f'--no-trunc {service_id}')
 
     def service_rm(self, service_ids):
         service_ids = ' '.join(service_ids)
@@ -348,7 +347,7 @@ class DockerSwarmCLIInterface(DockerSwarmInterface, DockerCLIInterface):
 
     @docker_columns
     def node_ps(self, node_id):
-        return self._run_docker(subcommand='node ps', args='--no-trunc {}'.format(node_id))
+        return self._run_docker(subcommand='node ps', args=f'--no-trunc {node_id}')
 
     def node_update(self, node_id, **kwopts):
         return self._run_docker(subcommand='node update', args='{kwopts} {node_id}'.format(
@@ -426,10 +425,10 @@ class DockerSwarmAPIInterface(DockerSwarmInterface, DockerAPIInterface):
         # service constraints
         kwopts['constraint'] = kwopts.get('constraint', [])
         if self._conf.service_create_image_constraint:
-            kwopts['constraint'].append((IMAGE_CONSTRAINT + '==' + image))
+            kwopts['constraint'].append(IMAGE_CONSTRAINT + '==' + image)
         if self._conf.service_create_cpus_constraint:
             cpus = kwopts.get('reserve_cpus', kwopts.get('limit_cpus', '1'))
-            kwopts['constraint'].append((CPUS_CONSTRAINT + '==' + cpus))
+            kwopts['constraint'].append(CPUS_CONSTRAINT + '==' + cpus)
         # ports
         if 'publish_port_random' in kwopts:
             kwopts['ports'] = [DockerSwarmAPIInterface.create_random_port_spec(kwopts.pop('publish_port_random'))]

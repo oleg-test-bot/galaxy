@@ -32,9 +32,9 @@ def int_to_octet(size):
         size /= 1000.
         no_unit += 1
     try:
-        return "%.2f %s" % (size, units[no_unit])
+        return "{:.2f} {}".format(size, units[no_unit])
     except IndexError:
-        return "%.0f %s" % (size * ((no_unit - len(units) + 1) * 1000.), units[-1])
+        return "{:.0f} {}".format(size * ((no_unit - len(units) + 1) * 1000.), units[-1])
 
 
 class Tools(BaseUIController):
@@ -302,7 +302,7 @@ class Tools(BaseUIController):
         if tool_name is None:
             raise ValueError("Tool can't be none")
         tool_errors = [[unicodify(a), b] for a, b in
-                       sa.select((galaxy.model.Job.table.c.stderr, galaxy.model.Job.table.c.create_time),
+                       sa.select((galaxy.model.Job.table.c.tool_stderr, galaxy.model.Job.table.c.create_time),
                         from_obj=[galaxy.model.Job.table],
                         whereclause=and_(galaxy.model.Job.table.c.tool_id == tool_name,
                                          galaxy.model.Job.table.c.state == 'error')).execute()]

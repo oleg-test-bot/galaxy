@@ -1,6 +1,12 @@
 <?xml version="1.0"?>
 <toolbox tool_path="${tool_conf_dir}" is_shed_conf="false">
   <tool file="upload.xml"/>
+  <section id="test" name="Test Section">
+    <tool file="multi_data_optional.xml" />
+    <tool file="paths_as_file.xml" />
+    <tool file="param_text_option.xml" />
+    <tool file="column_param.xml" />
+  </section>
   <tool file="test_data_source.xml"/>
   <tool file="simple_constructs.xml" />
   <tool file="color_param.xml" />
@@ -19,6 +25,7 @@
   <tool file="multi_output.xml" />
   <tool file="multi_output_configured.xml" />
   <tool file="multi_output_assign_primary.xml" />
+  <tool file="multi_output_assign_primary_ext_dbkey.xml" />
   <tool file="multi_output_recurse.xml" />
   <tool file="tool_provided_metadata_1.xml" />
   <tool file="tool_provided_metadata_2.xml" />
@@ -34,10 +41,14 @@
   <tool file="tool_provided_metadata_12.xml" />
   <tool file="empty_datasets.xml" />
   <tool file="inputs_as_json.xml" />
+  <tool file="inputs_as_json_profile.xml" />
   <tool file="inputs_as_json_with_paths.xml" />
   <tool file="filter_static_regexp.xml" />
+  <tool file="select_from_dataset.xml" />
   <tool file="dbkey_filter_input.xml" />
   <tool file="dbkey_filter_multi_input.xml" />
+  <tool file="dbkey_filter_collection.xml" />
+  <tool file="dbkey_filter_paired_collection.xml" />
   <tool file="dbkey_output_action.xml" />
   <tool file="composite_output.xml" />
   <tool file="composite_output_tests.xml" />
@@ -50,14 +61,18 @@
   <tool file="metadata_column_names.xml" />
   <tool file="strict_shell.xml" />
   <tool file="strict_shell_default_off.xml" />
+  <tool file="strict_shell_profile.xml" />
   <tool file="detect_errors.xml" />
   <tool file="detect_errors_aggressive.xml" />
   <tool file="qc_stdout.xml" />
+  <tool file="directory_uri.xml" />
   <tool file="md5sum.xml" />
   <tool file="checksum.xml" />
+  <tool file="sim_size_delta.xml" />
   <tool file="composite_shapefile.xml" />
   <tool file="is_valid_xml.xml" />
-  <tool file="param_value_from_file.xml"/>
+  <tool file="expression_tools/parse_values_from_file.xml"/>
+  <tool file="expression_tools/pick_value.xml" />
   <!--
   TODO: Figure out why this transiently fails on Jenkins.
   <tool file="maxseconds.xml" />
@@ -66,6 +81,7 @@
   <tool file="job_environment_default.xml" />
   <tool file="job_environment_default_legacy.xml" />
   <tool file="job_environment_explicit_shared_home.xml" />
+  <tool file="job_environment_explicit_isolated_home.xml" />
   <tool file="galaxy_slots_and_memory.xml" />
   <tool file="version_command_plain.xml" />
   <tool file="version_command_interpreter.xml" />
@@ -154,9 +170,15 @@
   <tool file="collection_creates_dynamic_nested_fail.xml" />
   <tool file="collection_cat_group_tag.xml" />
   <tool file="collection_cat_group_tag_multiple.xml" />
+  <tool file="discover_sort_by.xml" />
   <tool file="expression_forty_two.xml" />
+  <tool file="expression_pick_larger_file.xml" />
   <tool file="expression_parse_int.xml" />
   <tool file="expression_log_line_count.xml" />
+  <tool file="expression_null_handling_boolean.xml" />
+  <tool file="expression_null_handling_integer.xml" />
+  <tool file="expression_null_handling_float.xml" />
+  <tool file="expression_null_handling_text.xml" />
   <tool file="cheetah_casting.xml" />
   <tool file="cheetah_problem_unbound_var.xml" />
   <tool file="cheetah_problem_unbound_var_input.xml" />
@@ -189,6 +211,7 @@
   <tool file="for_workflows/count_list.xml" />
   <tool file="for_workflows/count_multi_file.xml" />
   <tool file="for_workflows/create_input_collection.xml" />
+  <tool file="for_workflows/randomlines.xml" />
 
   <section id="filter" name="For Tours">
     <tool file="for_tours/filtering.xml" />
@@ -202,6 +225,7 @@
   <tool file="mulled_example_conflict.xml" />
   <tool file="mulled_example_simple.xml" />
   <tool file="mulled_example_explicit.xml" />
+  <tool file="mulled_example_invalid_case.xml" />
   <tool file="mulled_example_broken_no_requirements.xml" />
 
   <tool file="simple_constructs.yml" />

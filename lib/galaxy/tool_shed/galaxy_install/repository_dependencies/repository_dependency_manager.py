@@ -5,10 +5,15 @@ into Galaxy from the Tool Shed.
 import json
 import logging
 import os
-
-from six.moves.urllib.error import HTTPError
-from six.moves.urllib.parse import urlencode, urlparse
-from six.moves.urllib.request import Request, urlopen
+from urllib.error import HTTPError
+from urllib.parse import (
+    urlencode,
+    urlparse,
+)
+from urllib.request import (
+    Request,
+    urlopen,
+)
 
 from galaxy.tool_shed.galaxy_install.tools import tool_panel_manager
 from galaxy.tool_shed.util import repository_util
@@ -27,7 +32,7 @@ from galaxy.util.tool_shed import encoding_util
 log = logging.getLogger(__name__)
 
 
-class RepositoryDependencyInstallManager(object):
+class RepositoryDependencyInstallManager:
 
     def __init__(self, app):
         self.app = app
@@ -43,7 +48,7 @@ class RepositoryDependencyInstallManager(object):
         install_model = self.app.install_model
         log.debug("Building repository dependency relationships...")
         for repo_info_dict in repo_info_dicts:
-            for name, repo_info_tuple in repo_info_dict.items():
+            for repo_info_tuple in repo_info_dict.values():
                 description, \
                     repository_clone_url, \
                     changeset_revision, \
@@ -308,7 +313,7 @@ class RepositoryDependencyInstallManager(object):
                       changeset_revision=str(repository.changeset_revision))
         pathspec = ['repository', 'get_repository_dependencies']
         try:
-            raw_text = url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+            raw_text = url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
         except Exception:
             log.exception("Error while trying to get URL: %s", build_url(tool_shed_url, pathspec=pathspec, params=params))
             return ''

@@ -6,7 +6,9 @@ repository](https://github.com/galaxyproject/galaxy).
 For information on contributing more broadly to the Galaxy ecosystem and a
 deeper discussion of some of these points - please see the
 [Develop](https://galaxyproject.org/develop) section of the [Galaxy Community
-Hub](https://galaxyproject.org).
+Hub](https://galaxyproject.org) and the [Galaxy Code
+Architecture](https://training.galaxyproject.org/training-material/topics/dev/tutorials/architecture/slides.html#1) slides that are part of the [Galaxy Training
+Materials](https://training.galaxyproject.org/).
 
 ## Before you Begin
 
@@ -55,11 +57,15 @@ https://help.github.com/en/github/getting-started-with-github/git-and-github-lea
 
 3. Choose the correct branch to develop your changes against.
 
-   * Additions of new features to the codebase should be pushed to the `dev`
-     branch (`git checkout dev`).
+   * The `master` branch is kept in sync with the latest tagged release, but
+     should **not** be used as the base (i.e. target) branch of a pull request.
 
-   * Most bug fixes to previous (or frozen) releases should be made against the
-     corrisponding `release_XX.XX` branch (`git checkout release_XX.XX`).
+   * Additions of new features to the codebase should be based off the `dev`
+     branch (`git checkout -b feature_branch dev`), with few
+     [exceptions](doc/source/project/organization.rst#handling-pull-requests).
+
+   * Most bug fixes should target the oldest supported release exhibiting the
+     issue (`git checkout -b bugfix_branch release_XX.XX`).
 
    * Serious security problems should not be fixed via pull request - please see
      [the Galaxy security policies](SECURITY_POLICY.md) for information about
@@ -82,10 +88,23 @@ https://help.github.com/en/github/getting-started-with-github/git-and-github-lea
    Developers reviewing your pull request will be happy to help you add or run
    the relevant tests as part of the pull request review process.
 
-6. Commit and push your changes to your
+6. Write a useful and properly formatted commit message. 
+   Follow [these guidelines and template](https://git-scm.com/book/en/v2/Distributed-Git-Contributing-to-a-Project#_commit_guidelines),
+   in particular start your message with a short imperative sentence on a single
+   line, possibly followed by a blank line and a more detailed explanation.
+
+   In the detailed explanation it's good to include relevant external references
+   (e.g. GitHub issue fixed) using full URLs, and errors or tracebacks the
+   commit is supposed to fix.
+   You can use the Markdown syntax for lists and code highlighting, wrapping the
+   explanation text at 72 characters when possible.
+
+   Example of a good commit message: https://github.com/galaxyproject/galaxy/commit/0429c4d515536f9cca6b70b2abeb019de807c955
+
+7. Commit and push your changes to your
    [fork](https://help.github.com/en/github/using-git/pushing-commits-to-a-remote-repository).
 
-7. Open a [pull
+8. Open a [pull
    request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request)
    with these changes. Your pull request message ideally should include:
 
@@ -95,10 +114,10 @@ https://help.github.com/en/github/getting-started-with-github/git-and-github-lea
 
    * How to test the changes, if you haven't included specific tests already.
 
-8. The pull request should pass all the continuous integration tests which are
+9. The pull request should pass all the continuous integration tests which are
    automatically started by GitHub using e.g. Travis CI.
 
-9. Your pull request will be handled according to [some
+10. Your pull request will be handled according to [some
    rules](doc/source/project/organization.rst#handling-pull-requests).
 
 ## Style guidelines

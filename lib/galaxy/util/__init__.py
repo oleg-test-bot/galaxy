@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
 """
 Utility functions used systemwide.
 
 """
-from __future__ import absolute_import
 
 import binascii
 import collections
@@ -19,6 +17,7 @@ import stat
 import string
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unicodedata
@@ -29,29 +28,31 @@ from email.mime.text import MIMEText
 from functools import partial
 from hashlib import md5
 from os.path import relpath
-from xml.etree import ElementInclude, ElementTree
-from xml.etree.ElementTree import ParseError
+from urllib.parse import (
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunsplit,
+)
 
+import requests
 try:
     import grp
 except ImportError:
     # For Pulsar on Windows (which does not use the function that uses grp)
     grp = None
-
 from boltons.iterutils import (
     default_enter,
     remap,
 )
-from six import binary_type, iteritems, PY2, string_types, text_type
-from six.moves import (
-    xrange,
-    zip
-)
-from six.moves.urllib import (
-    parse as urlparse,
-    request as urlrequest
-)
-from six.moves.urllib.request import urlopen
+LXML_AVAILABLE = True
+try:
+    from lxml import etree
+except ImportError:
+    LXML_AVAILABLE = False
+    import xml.etree.ElementTree as etree
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 try:
     import docutils.core as docutils_core
@@ -65,11 +66,11 @@ try:
 except ImportError:
     uwsgi = None
 
-from .inflection import English, Inflector
-from .logging import get_logger
+from .custom_logging import get_logger
+from .inflection import Inflector
 from .path import safe_contains, safe_makedirs, safe_relpath  # noqa: F401
 
-inflector = Inflector(English)
+inflector = Inflector()
 
 log = get_logger(__name__)
 _lock = threading.RLock()
@@ -91,6 +92,8 @@ FILENAME_VALID_CHARS = '.,^_-()[]0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJK
 RW_R__R__ = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
 RWXR_XR_X = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
 RWXRWXRWX = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
+
+XML = etree.XML
 
 defaultdict = collections.defaultdict
 
@@ -196,24 +199,7 @@ def iter_start_of_line(fh, chunk_size=None):
     """
     Iterate over fh and call readline(chunk_size)
     """
-    for line in iter(partial(fh.readline, chunk_size), ""):
-        yield line
-
-
-def file_iter(fname, sep=None):
-    """
-    This generator iterates over a file and yields its lines
-    splitted via the C{sep} parameter. Skips empty lines and lines starting with
-    the C{#} character.
-
-    >>> lines = [ line for line in file_iter(__file__) ]
-    >>> len(lines) !=  0
-    True
-    """
-    with open(fname) as fh:
-        for line in fh:
-            if line and line[0] != '#':
-                yield line.split(sep)
+    yield from iter(partial(fh.readline, chunk_size), "")
 
 
 def file_reader(fp, chunk_size=CHUNK_SIZE):
@@ -234,38 +220,51 @@ def unique_id(KEY_SIZE=128):
     >>> len(set(ids))
     1000
     """
-    random_bits = text_type(random.getrandbits(KEY_SIZE)).encode("UTF-8")
+    random_bits = str(random.getrandbits(KEY_SIZE)).encode("UTF-8")
     return md5(random_bits).hexdigest()
 
 
-def parse_xml(fname):
+def parse_xml(fname, strip_whitespace=True, remove_comments=True):
     """Returns a parsed xml tree"""
-    # handle deprecation warning for XMLParsing a file with DOCTYPE
-    class DoctypeSafeCallbackTarget(ElementTree.TreeBuilder):
-        def doctype(*args):
-            pass
-    tree = ElementTree.ElementTree()
+    parser = None
+    if remove_comments and LXML_AVAILABLE:
+        # If using stdlib etree comments are always removed,
+        # but lxml doesn't do this by default
+        parser = etree.XMLParser(remove_comments=remove_comments)
     try:
-        root = tree.parse(fname, parser=ElementTree.XMLParser(target=DoctypeSafeCallbackTarget()))
-        for elem in root.iter('*'):
+        tree = etree.parse(fname, parser=parser)
+        root = tree.getroot()
+        if strip_whitespace:
+            for elem in root.iter('*'):
+                if elem.text is not None:
+                    elem.text = elem.text.strip()
+                if elem.tail is not None:
+                    elem.tail = elem.tail.strip()
+    except OSError as e:
+        if e.errno is None and not os.path.exists(fname):
+            # lxml doesn't set errno
+            e.errno = errno.ENOENT
+        raise
+    except etree.ParseError:
+        log.exception("Error parsing file %s", fname)
+        raise
+    return tree
+
+
+def parse_xml_string(xml_string, strip_whitespace=True):
+    try:
+        tree = etree.fromstring(xml_string)
+    except ValueError as e:
+        if 'strings with encoding declaration are not supported' in unicodify(e):
+            tree = etree.fromstring(xml_string.encode('utf-8'))
+        else:
+            raise e
+    if strip_whitespace:
+        for elem in tree.iter('*'):
             if elem.text is not None:
                 elem.text = elem.text.strip()
             if elem.tail is not None:
                 elem.tail = elem.tail.strip()
-    except ParseError:
-        log.exception("Error parsing file %s", fname)
-        raise
-    ElementInclude.include(root)
-    return tree
-
-
-def parse_xml_string(xml_string):
-    tree = ElementTree.fromstring(xml_string)
-    for elem in tree.iter('*'):
-        if elem.text is not None:
-            elem.text = elem.text.strip()
-        if elem.tail is not None:
-            elem.tail = elem.tail.strip()
     return tree
 
 
@@ -275,16 +274,13 @@ def xml_to_string(elem, pretty=False):
     """
     try:
         if elem is not None:
-            if PY2:
-                xml_str = ElementTree.tostring(elem, encoding='utf-8')
-            else:
-                xml_str = ElementTree.tostring(elem, encoding='unicode')
+            xml_str = etree.tostring(elem, encoding='unicode')
         else:
             xml_str = ''
     except TypeError as e:
         # we assume this is a comment
         if hasattr(elem, 'text'):
-            return u"<!-- %s -->\n" % elem.text
+            return "<!-- %s -->\n" % elem.text
         else:
             raise e
     if xml_str and pretty:
@@ -316,17 +312,17 @@ def xml_element_to_dict(elem):
     if sub_elems:
         sub_elem_dict = dict()
         for sub_sub_elem_dict in map(xml_element_to_dict, sub_elems):
-            for key, value in iteritems(sub_sub_elem_dict):
+            for key, value in sub_sub_elem_dict.items():
                 if key not in sub_elem_dict:
                     sub_elem_dict[key] = []
                 sub_elem_dict[key].append(value)
-        for key, value in iteritems(sub_elem_dict):
+        for key, value in sub_elem_dict.items():
             if len(value) == 1:
                 rval[elem.tag][key] = value[0]
             else:
                 rval[elem.tag][key] = value
     if elem.attrib:
-        for key, value in iteritems(elem.attrib):
+        for key, value in elem.attrib.items():
             rval[elem.tag]["@%s" % key] = value
 
     if elem.text:
@@ -421,7 +417,7 @@ def shrink_stream_by_size(value, size, join_by=b"..", left_larger=True, beginnin
 
 
 def shrink_and_unicodify(stream):
-    stream = unicodify(stream, strip_null=True) or u''
+    stream = unicodify(stream, strip_null=True) or ''
     if (len(stream) > DATABASE_MAX_STRING_SIZE):
         stream = shrink_string_by_size(stream,
                                        DATABASE_MAX_STRING_SIZE,
@@ -447,7 +443,7 @@ def shrink_string_by_size(value, size, join_by="..", left_larger=True, beginning
                 left_index += 1
             else:
                 right_index += 1
-        value = "%s%s%s" % (value[:left_index], join_by, value[-right_index:])
+        value = "{}{}{}".format(value[:left_index], join_by, value[-right_index:])
     return value
 
 
@@ -466,7 +462,7 @@ def pretty_print_time_interval(time=False, precise=False, utc=False):
         diff = now - datetime.fromtimestamp(time)
     elif isinstance(time, datetime):
         diff = now - time
-    elif isinstance(time, string_types):
+    elif isinstance(time, str):
         try:
             time = datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f")
         except ValueError:
@@ -559,7 +555,7 @@ def sanitize_text(text, valid_characters=valid_chars, character_map=mapped_chars
     """
     if isinstance(text, list):
         return [sanitize_text(x, valid_characters=valid_characters, character_map=character_map, invalid_character=invalid_character) for x in text]
-    if not isinstance(text, string_types):
+    if not isinstance(text, str):
         text = smart_str(text)
     return _sanitize_text_helper(text, valid_characters=valid_characters, character_map=character_map)
 
@@ -594,7 +590,7 @@ def sanitize_lists_to_string(values, valid_characters=valid_chars, character_map
 
 def sanitize_param(value, valid_characters=valid_chars, character_map=mapped_chars, invalid_character='X'):
     """Clean incoming parameters (strings or lists)"""
-    if isinstance(value, string_types):
+    if isinstance(value, str):
         return sanitize_text(value, valid_characters=valid_characters, character_map=character_map, invalid_character=invalid_character)
     elif isinstance(value, list):
         return [sanitize_text(x, valid_characters=valid_characters, character_map=character_map, invalid_character=invalid_character) for x in value]
@@ -662,7 +658,7 @@ def mask_password_from_url(url):
     >>> mask_password_from_url( 'amqp://localhost')
     'amqp://localhost'
     """
-    split = urlparse.urlsplit(url)
+    split = urlsplit(url)
     if split.password:
         if url.count(split.password) == 1:
             url = url.replace(split.password, "********")
@@ -670,13 +666,13 @@ def mask_password_from_url(url):
             # This can manipulate the input other than just masking password,
             # so the previous string replace method is preferred when the
             # password doesn't appear twice in the url
-            split = split._replace(netloc=split.netloc.replace("%s:%s" % (split.username, split.password), '%s:********' % split.username))
-            url = urlparse.urlunsplit(split)
+            split = split._replace(netloc=split.netloc.replace(f"{split.username}:{split.password}", '%s:********' % split.username))
+            url = urlunsplit(split)
     return url
 
 
 def ready_name_for_url(raw_name):
-    u""" General method to convert a string (i.e. object name) to a URL-ready
+    """ General method to convert a string (i.e. object name) to a URL-ready
     slug.
 
     >>> ready_name_for_url( "My Cool Object" )
@@ -753,15 +749,13 @@ def merge_sorted_iterables(operator, *iterables):
     """
     first_iterable = iterables[0]
     if len(iterables) == 1:
-        for el in first_iterable:
-            yield el
+        yield from first_iterable
     else:
-        for el in __merge_two_sorted_iterables(
+        yield from __merge_two_sorted_iterables(
             operator,
             iter(first_iterable),
             merge_sorted_iterables(operator, *iterables[1:])
-        ):
-            yield el
+        )
 
 
 def __merge_two_sorted_iterables(operator, iterable1, iterable2):
@@ -787,13 +781,11 @@ def __merge_two_sorted_iterables(operator, iterable1, iterable2):
         yield next_1
     if next_2 is not unset:
         yield next_2
-    for el in iterable1:
-        yield el
-    for el in iterable2:
-        yield el
+    yield from iterable1
+    yield from iterable2
 
 
-class Params(object):
+class Params:
     """
     Stores and 'sanitizes' parameters. Alphanumeric characters and the
     non-alphanumeric ones that are deemed safe are let to pass through (see L{valid_chars}).
@@ -826,10 +818,9 @@ class Params(object):
                 # name. Anything relying on NEVER_SANITIZE should be
                 # changed to not require this and NEVER_SANITIZE should be
                 # removed.
-                if (value is not None and
-                        key not in self.NEVER_SANITIZE and
-                        True not in [key.endswith("|%s" % nonsanitize_parameter) for
-                                     nonsanitize_parameter in self.NEVER_SANITIZE]):
+                if (value is not None and key not in self.NEVER_SANITIZE
+                        and True not in [key.endswith("|%s" % nonsanitize_parameter) for
+                                         nonsanitize_parameter in self.NEVER_SANITIZE]):
                     self.__dict__[key] = sanitize_param(value)
                 else:
                     self.__dict__[key] = value
@@ -876,7 +867,7 @@ def rst_to_html(s, error=False):
     if docutils_core is None:
         raise Exception("Attempted to use rst_to_html but docutils unavailable.")
 
-    class FakeStream(object):
+    class FakeStream:
         def write(self, str):
             if len(str) > 0 and not str.isspace():
                 if error:
@@ -936,7 +927,7 @@ falsy = frozenset({'false', 'no', 'off', 'n', 'f', '0'})
 
 
 def asbool(obj):
-    if isinstance(obj, string_types):
+    if isinstance(obj, str):
         obj = obj.strip().lower()
         if obj in truthy:
             return True
@@ -967,7 +958,7 @@ def string_as_bool_or_none(string):
     string = str(string).lower()
     if string in ('true', 'yes', 'on'):
         return True
-    elif string == 'none':
+    elif string in ['none', 'null']:
         return None
     else:
         return False
@@ -996,7 +987,7 @@ def listify(item, do_strip=False):
         return item
     elif isinstance(item, tuple):
         return list(item)
-    elif isinstance(item, string_types) and item.count(','):
+    elif isinstance(item, str) and item.count(','):
         if do_strip:
             return [token.strip() for token in item.split(',')]
         else:
@@ -1025,40 +1016,32 @@ def roundify(amount, sfs=2):
 
 
 def unicodify(value, encoding=DEFAULT_ENCODING, error='replace', strip_null=False):
-    u"""
+    """
     Returns a Unicode string or None.
 
     >>> assert unicodify(None) is None
-    >>> assert unicodify('simple string') == u'simple string'
-    >>> assert unicodify(3) == u'3'
-    >>> assert unicodify(bytearray([115, 116, 114, 196, 169, 195, 177, 103])) == u'strĩñg'
-    >>> assert unicodify(Exception(u'strĩñg')) == u'strĩñg'
-    >>> assert unicodify('cómplǐcḁtëd strĩñg') == u'cómplǐcḁtëd strĩñg'
-    >>> s = u'cómplǐcḁtëd strĩñg'; assert unicodify(s) == s
-    >>> s = u'lâtín strìñg'; assert unicodify(s.encode('latin-1'), 'latin-1') == s
-    >>> s = u'lâtín strìñg'; assert unicodify(s.encode('latin-1')) == u'l\ufffdt\ufffdn str\ufffd\ufffdg'
-    >>> s = u'lâtín strìñg'; assert unicodify(s.encode('latin-1'), error='ignore') == u'ltn strg'
-    >>> if PY2: assert unicodify(Exception(u'¼ cup of flour'.encode('latin-1')), error='ignore') == ' cup of flour'
+    >>> assert unicodify('simple string') == 'simple string'
+    >>> assert unicodify(3) == '3'
+    >>> assert unicodify(bytearray([115, 116, 114, 196, 169, 195, 177, 103])) == 'strĩñg'
+    >>> assert unicodify(Exception('strĩñg')) == 'strĩñg'
+    >>> assert unicodify('cómplǐcḁtëd strĩñg') == 'cómplǐcḁtëd strĩñg'
+    >>> s = 'cómplǐcḁtëd strĩñg'; assert unicodify(s) == s
+    >>> s = 'lâtín strìñg'; assert unicodify(s.encode('latin-1'), 'latin-1') == s
+    >>> s = 'lâtín strìñg'; assert unicodify(s.encode('latin-1')) == 'l\ufffdt\ufffdn str\ufffd\ufffdg'
+    >>> s = 'lâtín strìñg'; assert unicodify(s.encode('latin-1'), error='ignore') == 'ltn strg'
     """
     if value is None:
         return value
     try:
         if isinstance(value, bytearray):
             value = bytes(value)
-        elif not isinstance(value, string_types) and not isinstance(value, binary_type):
-            # In Python 2, value is not an instance of basestring (i.e. str or unicode)
-            # In Python 3, value is not an instance of bytes or str
-            try:
-                value = text_type(value)
-            except Exception:
-                value = str(value)
-        # Now in Python 2, value is an instance of basestring, but may be not unicode
-        # Now in Python 3, value is an instance of bytes or str
-        if not isinstance(value, text_type):
-            value = text_type(value, encoding, error)
-    except Exception:
-        msg = "Value '%s' could not be coerced to Unicode" % value
-        log.exception(msg)
+        elif not isinstance(value, (str, bytes)):
+            value = str(value)
+        # Now value is an instance of bytes or str
+        if not isinstance(value, str):
+            value = str(value, encoding, error)
+    except Exception as e:
+        msg = "Value '{}' could not be coerced to Unicode: {}('{}')".format(value, type(e).__name__, e)
         raise Exception(msg)
     if strip_null:
         return value.replace('\0', '')
@@ -1066,7 +1049,7 @@ def unicodify(value, encoding=DEFAULT_ENCODING, error='replace', strip_null=Fals
 
 
 def smart_str(s, encoding=DEFAULT_ENCODING, strings_only=False, errors='strict'):
-    u"""
+    """
     Returns a bytestring version of 's', encoded as specified in 'encoding'.
 
     If strings_only is True, don't convert (some) non-string-like objects.
@@ -1079,20 +1062,17 @@ def smart_str(s, encoding=DEFAULT_ENCODING, strings_only=False, errors='strict')
     >>> assert smart_str(3, strings_only=True) == 3
     >>> s = b'a bytes string'; assert smart_str(s) == s
     >>> s = bytearray(b'a bytes string'); assert smart_str(s) == s
-    >>> assert smart_str(u'a simple unicode string') == b'a simple unicode string'
-    >>> assert smart_str(u'à strange ünicode ڃtring') == b'\\xc3\\xa0 strange \\xc3\\xbcnicode \\xda\\x83tring'
+    >>> assert smart_str('a simple unicode string') == b'a simple unicode string'
+    >>> assert smart_str('à strange ünicode ڃtring') == b'\\xc3\\xa0 strange \\xc3\\xbcnicode \\xda\\x83tring'
     >>> assert smart_str(b'\\xc3\\xa0n \\xc3\\xabncoded utf-8 string', encoding='latin-1') == b'\\xe0n \\xebncoded utf-8 string'
     >>> assert smart_str(bytearray(b'\\xc3\\xa0n \\xc3\\xabncoded utf-8 string'), encoding='latin-1') == b'\\xe0n \\xebncoded utf-8 string'
     """
     if strings_only and isinstance(s, (type(None), int)):
         return s
-    if not isinstance(s, string_types) and not isinstance(s, (binary_type, bytearray)):
-        # In Python 2, s is not an instance of basestring or bytearray
-        # In Python 3, s is not an instance of str, bytes or bytearray
+    if not isinstance(s, (str, bytes, bytearray)):
         s = str(s)
-    # Now in Python 2, value is an instance of basestring or bytearray
-    # Now in Python 3, value is an instance of str, bytes or bytearray
-    if not isinstance(s, (binary_type, bytearray)):
+    # Now s is an instance of str, bytes or bytearray
+    if not isinstance(s, (bytes, bytearray)):
         return s.encode(encoding, errors)
     elif s and encoding != DEFAULT_ENCODING:
         return s.decode(DEFAULT_ENCODING, errors).encode(encoding, errors)
@@ -1109,9 +1089,9 @@ def strip_control_characters_nested(item):
     """Recursively strips control characters from lists, dicts, tuples."""
 
     def visit(path, key, value):
-        if isinstance(key, string_types):
+        if isinstance(key, str):
             key = strip_control_characters(key)
-        if isinstance(value, string_types):
+        if isinstance(value, str):
             value = strip_control_characters(value)
         return key, value
 
@@ -1124,6 +1104,19 @@ def object_to_string(obj):
 
 def string_to_object(s):
     return binascii.unhexlify(s)
+
+
+def clean_multiline_string(multiline_string, sep='\n'):
+    """
+    Dedent, split, remove first and last empty lines, rejoin.
+    """
+    multiline_string = textwrap.dedent(multiline_string)
+    string_list = multiline_string.split(sep)
+    if not string_list[0]:
+        string_list = string_list[1:]
+    if not string_list[-1]:
+        string_list = string_list[:-1]
+    return '\n'.join(string_list) + '\n'
 
 
 class ParamsWithSpecs(collections.defaultdict):
@@ -1164,8 +1157,8 @@ class ParamsWithSpecs(collections.defaultdict):
 
 
 def compare_urls(url1, url2, compare_scheme=True, compare_hostname=True, compare_path=True):
-    url1 = urlparse.urlparse(url1)
-    url2 = urlparse.urlparse(url2)
+    url1 = urlparse(url1)
+    url2 = urlparse(url2)
     if compare_scheme and url1.scheme and url2.scheme and url1.scheme != url2.scheme:
         return False
     if compare_hostname and url1.hostname and url2.hostname and url1.hostname != url2.hostname:
@@ -1177,10 +1170,7 @@ def compare_urls(url1, url2, compare_scheme=True, compare_hostname=True, compare
 
 def read_dbnames(filename):
     """ Read build names from file """
-    class DBNames(list):
-        default_value = "?"
-        default_name = "unspecified (?)"
-    db_names = DBNames()
+    db_names = []
     try:
         ucsc_builds = {}
         man_builds = []  # assume these are integers
@@ -1220,16 +1210,14 @@ def read_dbnames(filename):
             ucsc_builds[db_base].sort()
             ucsc_builds[db_base].reverse()
             ucsc_builds[db_base] = [(build, name) for _, build, name in ucsc_builds[db_base]]
-            db_names = DBNames(db_names + ucsc_builds[db_base])
+            db_names = list(db_names + ucsc_builds[db_base])
         if len(db_names) > 1 and len(man_builds) > 0:
             db_names.append((db_names.default_value, '----- Additional Species Are Below -----'))
         man_builds.sort()
         man_builds = [(build, name) for name, build in man_builds]
-        db_names = DBNames(db_names + man_builds)
+        db_names = list(db_names + man_builds)
     except Exception as e:
         log.error("ERROR: Unable to read builds file: %s", unicodify(e))
-    if len(db_names) < 1:
-        db_names = DBNames([(db_names.default_value, db_names.default_name)])
     return db_names
 
 
@@ -1258,7 +1246,7 @@ def read_build_sites(filename, check_builds=True):
 
 
 def relativize_symlinks(path, start=None, followlinks=False):
-    for root, dirs, files in os.walk(path, followlinks=followlinks):
+    for root, _, files in os.walk(path, followlinks=followlinks):
         rel_start = None
         for file_name in files:
             symlink_file_name = os.path.join(root, file_name)
@@ -1279,7 +1267,7 @@ def stringify_dictionary_keys(in_dict):
     # changes unicode keys into strings, only works on top level (does not recurse)
     # unicode keys are not valid for expansion into keyword arguments on method calls
     out_dict = {}
-    for key, value in iteritems(in_dict):
+    for key, value in in_dict.items():
         out_dict[str(key)] = value
     return out_dict
 
@@ -1292,7 +1280,7 @@ def mkstemp_ln(src, prefix='mkstemp_ln_'):
     """
     dir = os.path.dirname(src)
     names = tempfile._get_candidate_names()
-    for seq in xrange(tempfile.TMP_MAX):
+    for _ in range(tempfile.TMP_MAX):
         name = next(names)
         file = os.path.join(dir, prefix + name)
         try:
@@ -1302,7 +1290,7 @@ def mkstemp_ln(src, prefix='mkstemp_ln_'):
             if e.errno == errno.EEXIST:
                 continue  # try again
             raise
-    raise IOError(errno.EEXIST, "No usable temporary file name found")
+    raise OSError(errno.EEXIST, "No usable temporary file name found")
 
 
 def umask_fix_perms(path, umask, unmasked_perms, gid=None):
@@ -1320,7 +1308,7 @@ def umask_fix_perms(path, umask, unmasked_perms, gid=None):
         try:
             os.chmod(path, perms)
         except Exception as e:
-            log.warning('Unable to honor umask (%s) for %s, tried to set: %s but mode remains %s, error was: %s' % (oct(umask),
+            log.warning('Unable to honor umask ({}) for {}, tried to set: {} but mode remains {}, error was: {}'.format(oct(umask),
                                                                                                                     path,
                                                                                                                     oct(perms),
                                                                                                                     oct(stat.S_IMODE(st.st_mode)),
@@ -1336,7 +1324,7 @@ def umask_fix_perms(path, umask, unmasked_perms, gid=None):
             except Exception:
                 desired_group = gid
                 current_group = st.st_gid
-            log.warning('Unable to honor primary group (%s) for %s, group remains %s, error was: %s' % (desired_group,
+            log.warning('Unable to honor primary group ({}) for {}, group remains {}, error was: {}'.format(desired_group,
                                                                                                         path,
                                                                                                         current_group,
                                                                                                         unicodify(e)))
@@ -1397,7 +1385,7 @@ def nice_size(size):
             size = size / float(1024 ** ind)
             if word == 'bytes':  # No decimals for bytes
                 return "%s%d bytes" % (prefix, size)
-            return "%s%.1f %s" % (prefix, size, word)
+            return f"{prefix}{size:.1f} {word}"
     return '??? bytes'
 
 
@@ -1444,7 +1432,7 @@ def size_to_bytes(size):
     elif multiple.startswith('e'):
         return int(number * 1024 ** 6)
     else:
-        raise ValueError("Unknown multiplier '%s' in '%s'" % (multiple, size))
+        raise ValueError(f"Unknown multiplier '{multiple}' in '{size}'")
 
 
 def send_mail(frm, to, subject, body, config, html=None):
@@ -1656,51 +1644,51 @@ def build_url(base_url, port=80, scheme='http', pathspec=None, params=None, dose
         params = dict()
     if pathspec is None:
         pathspec = []
-    parsed_url = urlparse.urlparse(base_url)
+    parsed_url = urlparse(base_url)
     if scheme != 'http':
         parsed_url.scheme = scheme
     assert parsed_url.scheme in ('http', 'https', 'ftp'), 'Invalid URL scheme: %s' % scheme
     if port != 80:
         url = '%s://%s:%d/%s' % (parsed_url.scheme, parsed_url.netloc.rstrip('/'), int(port), parsed_url.path)
     else:
-        url = '%s://%s/%s' % (parsed_url.scheme, parsed_url.netloc.rstrip('/'), parsed_url.path.lstrip('/'))
+        url = '{}://{}/{}'.format(parsed_url.scheme, parsed_url.netloc.rstrip('/'), parsed_url.path.lstrip('/'))
     if len(pathspec) > 0:
-        url = '%s/%s' % (url.rstrip('/'), '/'.join(pathspec))
+        url = '{}/{}'.format(url.rstrip('/'), '/'.join(pathspec))
     if parsed_url.query:
         for query_parameter in parsed_url.query.split('&'):
             key, value = query_parameter.split('=')
             params[key] = value
     if params:
-        url += '?%s' % urlparse.urlencode(params, doseq=doseq)
+        url += '?%s' % urlencode(params, doseq=doseq)
     return url
 
 
-def url_get(base_url, password_mgr=None, pathspec=None, params=None):
+def url_get(base_url, auth=None, pathspec=None, params=None, max_retries=5, backoff_factor=1):
     """Make contact with the uri provided and return any contents."""
-    # Uses system proxy settings if they exist.
-    proxy = urlrequest.ProxyHandler()
-    if password_mgr is not None:
-        auth = urlrequest.HTTPDigestAuthHandler(password_mgr)
-        urlopener = urlrequest.build_opener(proxy, auth)
-    else:
-        urlopener = urlrequest.build_opener(proxy)
-    urlrequest.install_opener(urlopener)
     full_url = build_url(base_url, pathspec=pathspec, params=params)
-    response = urlopener.open(full_url)
-    content = response.read()
-    response.close()
-    return unicodify(content)
+    s = requests.Session()
+    retries = Retry(total=max_retries, backoff_factor=backoff_factor, status_forcelist=[429])
+    s.mount(base_url, HTTPAdapter(max_retries=retries))
+    response = s.get(full_url, auth=auth)
+    response.raise_for_status()
+    return response.text
 
 
 def download_to_file(url, dest_file_path, timeout=30, chunk_size=2 ** 20):
     """Download a URL to a file in chunks."""
-    src = urlopen(url, timeout=timeout)
-    with open(dest_file_path, 'wb') as f:
-        while True:
-            chunk = src.read(chunk_size)
-            if not chunk:
-                break
-            f.write(chunk)
+    with requests.get(url, timeout=timeout, stream=True) as r, open(dest_file_path, 'wb') as f:
+        for chunk in r.iter_content(chunk_size):
+            if chunk:
+                f.write(chunk)
+
+
+class classproperty:
+
+    def __init__(self, f):
+        self.f = f
+
+    def __get__(self, obj, owner):
+        return self.f(owner)
 
 
 def get_executable():
@@ -1723,7 +1711,7 @@ def get_executable():
     return exe
 
 
-class ExecutionTimer(object):
+class ExecutionTimer:
 
     def __init__(self):
         self.begin = time.time()
@@ -1736,7 +1724,7 @@ class ExecutionTimer(object):
         return (time.time() - self.begin)
 
 
-class StructuredExecutionTimer(object):
+class StructuredExecutionTimer:
 
     def __init__(self, timer_id, template, **tags):
         self.begin = time.time()

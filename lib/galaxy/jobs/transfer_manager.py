@@ -5,11 +5,10 @@ IPC with multiple process configurations.
 import json
 import logging
 import os
+import shlex
 import socket
 import subprocess
 import threading
-
-from six.moves import shlex_quote
 
 from galaxy.util import (
     listify,
@@ -21,7 +20,7 @@ from galaxy.util.json import jsonrpc_request, validate_jsonrpc_response
 log = logging.getLogger(__name__)
 
 
-class TransferManager(object):
+class TransferManager:
     """
     Manage simple data transfers from URLs to temporary locations.
     """
@@ -75,12 +74,12 @@ class TransferManager(object):
             # not the case, this process will need to be moved to a
             # non-blocking method.
             cmd = self.command + [tj.id]
-            log.debug('Transfer command is: %s', ' '.join(map(shlex_quote, cmd)))
+            log.debug('Transfer command is: %s', ' '.join(map(shlex.quote, cmd)))
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             p.wait()
             output = p.stdout.read(32768)
             if p.returncode != 0:
-                log.error('Spawning transfer job failed: %s: %s' % (tj.id, output))
+                log.error(f'Spawning transfer job failed: {tj.id}: {output}')
                 tj.state = tj.states.ERROR
                 tj.info = 'Spawning transfer job failed: %s' % output.splitlines()[-1]
                 self.sa_session.add(tj)
@@ -124,9 +123,9 @@ class TransferManager(object):
                 rval.append(dict(transfer_job_id=tj.id, state=tj.state))
         for tj_state in rval:
             if tj_state['state'] in self.app.model.TransferJob.terminal_states:
-                log.debug('Transfer job %s is in terminal state: %s' % (tj_state['transfer_job_id'], tj_state['state']))
+                log.debug('Transfer job {} is in terminal state: {}'.format(tj_state['transfer_job_id'], tj_state['state']))
             elif tj_state['state'] == self.app.model.TransferJob.states.PROGRESS and 'percent' in tj_state:
-                log.debug('Transfer job %s is %s%% complete' % (tj_state['transfer_job_id'], tj_state['percent']))
+                log.debug('Transfer job {} is {}% complete'.format(tj_state['transfer_job_id'], tj_state['percent']))
         if len(rval) == 1:
             return rval[0]
         return rval
@@ -154,7 +153,7 @@ class TransferManager(object):
                 except Exception:
                     self.sa_session.refresh(tj)
                     if tj.state == tj.states.RUNNING:
-                        log.error('Transfer job %s is marked as running but pid %s appears to be dead.' % (tj.id, tj.pid))
+                        log.error(f'Transfer job {tj.id} is marked as running but pid {tj.pid} appears to be dead.')
                         dead.append(tj)
             if dead:
                 self.run(dead)

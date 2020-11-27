@@ -3,7 +3,6 @@ workflow language reference implementation library cwltool. These proxies
 adapt cwltool to Galaxy features and abstract the library away from the rest
 of the framework.
 """
-from __future__ import absolute_import
 
 import base64
 import copy
@@ -15,7 +14,6 @@ from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 from uuid import uuid4
 
-import six
 
 from galaxy.exceptions import MessageException
 from galaxy.util import (
@@ -82,8 +80,6 @@ def tool_proxy(tool_path=None, tool_object=None, strict_cwl_validation=True, too
     grab relevant data.
     """
     ensure_cwltool_available()
-    # if uuid is None:
-    #    raise Exception("tool_proxy must be called with non-None uuid")
     tool = _to_cwl_tool_object(
         tool_path=tool_path,
         tool_object=tool_object,
@@ -116,7 +112,7 @@ def workflow_proxy(workflow_path, strict_cwl_validation=True):
 def load_job_proxy(job_directory, strict_cwl_validation=True):
     ensure_cwltool_available()
     job_objects_path = os.path.join(job_directory, JOB_JSON_FILE)
-    job_objects = json.load(open(job_objects_path, "r"))
+    job_objects = json.load(open(job_objects_path))
     job_inputs = job_objects["job_inputs"]
     output_dict = job_objects["output_dict"]
     # Any reason to retain older tool_path variant of this? Probably not?
@@ -239,14 +235,18 @@ def check_requirements(rec, tool=True):
             check_requirements(d, tool=tool)
 
 
-@six.add_metaclass(ABCMeta)
-class ToolProxy(object):
+class ToolProxy(metaclass=ABCMeta):
 
     def __init__(self, tool, uuid, raw_process_reference=None, tool_path=None):
         self._tool = tool
         self._uuid = uuid
         self._tool_path = tool_path
         self._raw_process_reference = raw_process_reference
+        # remove input parameter formats from CWL files so that cwltool
+        # does not complain they are missing in the input data
+        for input_field in self._tool.inputs_record_schema["fields"]:
+            if 'format' in input_field:
+                del input_field['format']
 
     def job_proxy(self, input_dict, output_dict, job_directory="."):
         """ Build a cwltool.job.Job describing computation using a input_json
@@ -424,7 +424,7 @@ class ExpressionToolProxy(CommandLineToolProxy):
     _class = "ExpressionTool"
 
 
-class JobProxy(object):
+class JobProxy:
 
     def __init__(self, tool_proxy, input_dict, output_dict, job_directory):
         self._tool_proxy = tool_proxy
@@ -512,7 +512,7 @@ class JobProxy(object):
             def stage_recursive(value):
                 is_list = isinstance(value, list)
                 is_dict = isinstance(value, dict)
-                log.info("handling value %s, is_list %s, is_dict %s" % (value, is_list, is_dict))
+                log.info(f"handling value {value}, is_list {is_list}, is_dict {is_dict}")
                 if is_list:
                     for val in value:
                         stage_recursive(val)
@@ -585,7 +585,7 @@ class JobProxy(object):
         else:
             self._ok = False
 
-        log.info("Output are %s, status is %s" % (out, process_status))
+        log.info(f"Output are {out}, status is {process_status}")
 
     def collect_outputs(self, tool_working_directory, rcode):
         if not self.is_command_line_job:
@@ -614,7 +614,7 @@ class JobProxy(object):
 
     def _output_extra_files_dir(self, output_name):
         output_id = self.output_id(output_name)
-        return os.path.join(self._job_directory, "dataset_%s_files" % output_id)
+        return os.path.join(self._job_directory, "outputs", "dataset_%s_files" % output_id)
 
     def output_id(self, output_name):
         output_id = self._output_dict[output_name]["id"]
@@ -639,7 +639,7 @@ class JobProxy(object):
         cwl_job = self.cwl_job()
 
         def stageFunc(resolved_path, target_path):
-            log.info("resolving %s to %s" % (resolved_path, target_path))
+            log.info(f"resolving {resolved_path} to {target_path}")
             try:
                 os.symlink(resolved_path, target_path)
             except OSError:
@@ -664,7 +664,7 @@ class JobProxy(object):
         return os.path.join(job_directory, JOB_JSON_FILE)
 
 
-class WorkflowProxy(object):
+class WorkflowProxy:
 
     def __init__(self, workflow, workflow_path=None):
         self._workflow = workflow
@@ -833,13 +833,15 @@ class WorkflowProxy(object):
                 # to be field - simpler types could be simpler inputs.
                 tool_state = {}
                 tool_state["parameter_type"] = "field"
+                default_set = "default" in input
                 default_value = input.get("default")
-                optional = False
+                optional = default_set
                 if isinstance(input_type, list) and "null" in input_type:
                     optional = True
                 if not optional and isinstance(input_type, dict) and "type" in input_type:
                     assert False
-                tool_state["default_value"] = {"src": "json", "value": default_value}
+                if default_set:
+                    tool_state["default"] = {"src": "json", "value": default_value}
                 tool_state["optional"] = optional
                 input_as_dict["tool_state"] = tool_state
             else:
@@ -871,7 +873,7 @@ def split_step_references(step_references, workflow_id=None, multiple=True):
                 sep_on = "#"
             expected_prefix = workflow_id + sep_on
             if not step_reference.startswith(expected_prefix):
-                raise AssertionError("step_reference [%s] doesn't start with %s" % (step_reference, expected_prefix))
+                raise AssertionError(f"step_reference [{step_reference}] doesn't start with {expected_prefix}")
             step_reference = step_reference[len(expected_prefix):]
 
         # Now just grab the step name and input/output name.
@@ -902,7 +904,7 @@ def build_step_proxy(workflow_proxy, step, index):
         return ToolStepProxy(workflow_proxy, step, index)
 
 
-class BaseStepProxy(object):
+class BaseStepProxy:
 
     def __init__(self, workflow_proxy, step, index):
         self._workflow_proxy = workflow_proxy
@@ -960,7 +962,7 @@ class BaseStepProxy(object):
         return inputs_as_dicts
 
 
-class InputProxy(object):
+class InputProxy:
 
     def __init__(self, step_proxy, cwl_input):
         self._cwl_input = cwl_input
@@ -1013,7 +1015,7 @@ class InputProxy(object):
 class ToolStepProxy(BaseStepProxy):
 
     def __init__(self, workflow_proxy, step, index):
-        super(ToolStepProxy, self).__init__(workflow_proxy, step, index)
+        super().__init__(workflow_proxy, step, index)
         self._tool_proxy = None
 
     @property
@@ -1052,7 +1054,7 @@ class ToolStepProxy(BaseStepProxy):
 class SubworkflowStepProxy(BaseStepProxy):
 
     def __init__(self, workflow_proxy, step, index):
-        super(SubworkflowStepProxy, self).__init__(workflow_proxy, step, index)
+        super().__init__(workflow_proxy, step, index)
         self._subworkflow_proxy = None
 
     def to_dict(self, input_connections):
@@ -1097,8 +1099,7 @@ def remove_pickle_problems(obj):
     return obj
 
 
-@six.add_metaclass(ABCMeta)
-class WorkflowToolReference(object):
+class WorkflowToolReference(metaclass=ABCMeta):
     pass
 
 
@@ -1199,7 +1200,7 @@ def _simple_field_to_output(field):
     return output_instance
 
 
-class ConditionalInstance(object):
+class ConditionalInstance:
 
     def __init__(self, name, case, whens):
         self.input_type = INPUT_TYPE.CONDITIONAL
@@ -1221,7 +1222,7 @@ class ConditionalInstance(object):
         return as_dict
 
 
-class SelectInputInstance(object):
+class SelectInputInstance:
 
     def __init__(self, name, label, description, options):
         self.input_type = INPUT_TYPE.SELECT
@@ -1242,7 +1243,7 @@ class SelectInputInstance(object):
         return as_dict
 
 
-class InputInstance(object):
+class InputInstance:
 
     def __init__(self, name, label, description, input_type, array=False, area=False, collection_type=None):
         self.input_type = input_type
@@ -1292,7 +1293,7 @@ OUTPUT_TYPE = Bunch(
 
 
 # TODO: Different subclasses - this is representing different types of things.
-class OutputInstance(object):
+class OutputInstance:
 
     def __init__(self, name, output_data_type, output_type, path=None, fields=None):
         self.name = name

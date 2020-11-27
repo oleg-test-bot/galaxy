@@ -22,7 +22,7 @@ class CloudController(BaseAPIController):
     """
 
     def __init__(self, app):
-        super(CloudController, self).__init__(app)
+        super().__init__(app)
         self.cloud_manager = cloud.CloudManager(app)
         self.datasets_serializer = datasets.DatasetSerializer(app)
 
@@ -44,7 +44,7 @@ class CloudController(BaseAPIController):
         """
         * POST /api/cloud/storage/get
             gets given objects from a given cloud-based bucket to a Galaxy history.
-        :type  trans: galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans: galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans: Galaxy web transaction
 
         :type  payload: dict
@@ -107,17 +107,17 @@ class CloudController(BaseAPIController):
             missing_arguments.append("authz_id")
 
         if len(missing_arguments) > 0:
-            raise ActionInputError("The following required arguments are missing in the payload: {}".format(missing_arguments))
+            raise ActionInputError(f"The following required arguments are missing in the payload: {missing_arguments}")
 
         try:
             history_id = self.decode_id(encoded_history_id)
         except exceptions.MalformedId as e:
-            raise ActionInputError('Invalid history ID. {}'.format(e))
+            raise ActionInputError(f'Invalid history ID. {e}')
 
         try:
             authz_id = self.decode_id(encoded_authz_id)
         except exceptions.MalformedId as e:
-            raise ActionInputError('Invalid authz ID. {}'.format(e))
+            raise ActionInputError(f'Invalid authz ID. {e}')
 
         if not isinstance(objects, list):
             raise ActionInputError('The `objects` should be a list, but received an object of type {} instead.'.format(
@@ -142,7 +142,7 @@ class CloudController(BaseAPIController):
             using the label assigned to the dataset in the given history (see `HistoryDatasetAssociation.name`).
             If no dataset ID is given, this API sends all the datasets belonging to a given history to a given
             cloud-based bucket.
-        :type  trans: galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans: galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans: Galaxy web transaction
 
         :type  payload: dictionary
@@ -195,17 +195,17 @@ class CloudController(BaseAPIController):
             missing_arguments.append("authz_id")
 
         if len(missing_arguments) > 0:
-            raise ActionInputError("The following required arguments are missing in the payload: {}".format(missing_arguments))
+            raise ActionInputError(f"The following required arguments are missing in the payload: {missing_arguments}")
 
         try:
             history_id = self.decode_id(encoded_history_id)
         except exceptions.MalformedId as e:
-            raise ActionInputError('Invalid history ID. {}'.format(e))
+            raise ActionInputError(f'Invalid history ID. {e}')
 
         try:
             authz_id = self.decode_id(encoded_authz_id)
         except exceptions.MalformedId as e:
-            raise ActionInputError('Invalid authz ID. {}'.format(e))
+            raise ActionInputError(f'Invalid authz ID. {e}')
 
         encoded_dataset_ids = payload.get("dataset_ids", None)
         if encoded_dataset_ids is None:

@@ -1,12 +1,10 @@
-from __future__ import absolute_import
-
 import base64
 import json
 import logging
+from html.parser import HTMLParser
+from http.client import HTTPConnection
 
 from markupsafe import escape
-from six.moves.html_parser import HTMLParser
-from six.moves.http_client import HTTPConnection
 from sqlalchemy import and_
 from sqlalchemy.orm import eagerload, joinedload, lazyload, undefer
 from sqlalchemy.sql import expression
@@ -255,6 +253,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
         stored_workflow.annotation = self.get_item_annotation_str(trans.sa_session, stored_workflow.user, stored_workflow)
         for step in stored_workflow.latest_workflow.steps:
             step.annotation = self.get_item_annotation_str(trans.sa_session, stored_workflow.user, step)
+        user_is_owner = True if trans.user == stored_workflow.user else False
         # Get rating data.
         user_item_rating = 0
         if trans.get_user():
@@ -264,8 +263,13 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
             else:
                 user_item_rating = 0
         ave_item_rating, num_ratings = self.get_ave_item_rating_data(trans.sa_session, stored_workflow)
-        return trans.fill_template_mako("workflow/display.mako", item=stored_workflow, item_data=stored_workflow.latest_workflow.steps,
-                                        user_item_rating=user_item_rating, ave_item_rating=ave_item_rating, num_ratings=num_ratings)
+        return trans.fill_template_mako("workflow/display.mako",
+                                        item=stored_workflow,
+                                        item_data=stored_workflow.latest_workflow.steps,
+                                        user_item_rating=user_item_rating,
+                                        ave_item_rating=ave_item_rating,
+                                        num_ratings=num_ratings,
+                                        user_is_owner=user_is_owner)
 
     @web.expose
     def get_item_content_async(self, trans, id):
@@ -311,7 +315,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
                 session = trans.sa_session
                 session.add(share)
                 session.flush()
-                trans.set_message("Workflow '%s' shared with user '%s'" % (escape(stored.name), escape(other.email)))
+                trans.set_message("Workflow '{}' shared with user '{}'".format(escape(stored.name), escape(other.email)))
                 return trans.response.send_redirect(url_for(controller='workflow', action='sharing', id=id))
         return trans.fill_template("/ind_share_base.mako",
                                    message=msg,
@@ -649,7 +653,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
         # The following query loads all user-owned workflows,
         # So that they can be copied or inserted in the workflow editor.
         workflows = trans.sa_session.query(model.StoredWorkflow) \
-            .filter_by(user=trans.user, deleted=False) \
+            .filter_by(user=trans.user, deleted=False, hidden=False) \
             .order_by(desc(model.StoredWorkflow.table.c.update_time)) \
             .options(joinedload('latest_workflow').joinedload('steps')) \
             .all()
@@ -660,7 +664,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
 
         # create workflow module models
         module_sections = []
-        for section_name, module_section in load_module_sections(trans).items():
+        for module_section in load_module_sections(trans).values():
             module_sections.append({
                 "title": module_section.get("title"),
                 "name": module_section.get("name"),
@@ -674,7 +678,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
         # create data manager tool models
         data_managers = []
         if trans.user_is_admin and trans.app.data_managers.data_managers:
-            for data_manager_id, data_manager_val in trans.app.data_managers.data_managers.items():
+            for data_manager_val in trans.app.data_managers.data_managers.values():
                 tool = data_manager_val.tool
                 if not tool.hidden:
                     data_managers.append({
@@ -758,7 +762,7 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
         request = unicodify(request_raw.strip(), 'utf-8')
 
         # Do request and get result.
-        auth_header = base64.b64encode('%s:%s' % (myexp_username, myexp_password))
+        auth_header = base64.b64encode(f'{myexp_username}:{myexp_password}')
         headers = {"Content-type": "text/xml", "Accept": "text/xml", "Authorization": "Basic %s" % auth_header}
         myexp_url = trans.app.config.myexperiment_target_url
         conn = HTTPConnection(myexp_url)
@@ -775,9 +779,9 @@ class WorkflowController(BaseUIController, SharableMixin, UsesStoredWorkflowMixi
         workflow_list_str = " <br>Return to <a href='%s'>workflow list." % url_for(controller='workflows', action='list')
         if myexp_workflow_id:
             return trans.show_message(
-                """Workflow '%s' successfully exported to myExperiment. <br/>
-                <a href="http://%s/workflows/%s">Click here to view the workflow on myExperiment</a> %s
-                """ % (stored.name, myexp_url, myexp_workflow_id, workflow_list_str),
+                """Workflow '{}' successfully exported to myExperiment. <br/>
+                <a href="http://{}/workflows/{}">Click here to view the workflow on myExperiment</a> {}
+                """.format(stored.name, myexp_url, myexp_workflow_id, workflow_list_str),
                 use_panels=True)
         else:
             return trans.show_error_message(
@@ -953,7 +957,7 @@ def _build_workflow_on_str(instance_ds_names):
     elif num_multi_inputs == 1:
         return " on %s" % instance_ds_names[0]
     else:
-        return " on %s and %s" % (", ".join(instance_ds_names[0:-1]), instance_ds_names[-1])
+        return " on {} and {}".format(", ".join(instance_ds_names[0:-1]), instance_ds_names[-1])
 
 
 def _expand_multiple_inputs(kwargs):

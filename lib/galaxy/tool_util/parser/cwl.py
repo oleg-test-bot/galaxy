@@ -30,6 +30,10 @@ class CwlToolSource(ToolSource):
         self._strict_cwl_validation = strict_cwl_validation
 
     @property
+    def source_path(self):
+        return self._source_path
+
+    @property
     def tool_proxy(self):
         if self._tool_proxy is None:
             self._tool_proxy = tool_proxy(self._source_path, strict_cwl_validation=self._strict_cwl_validation)
@@ -154,6 +158,9 @@ class CwlToolSource(ToolSource):
 
     def parse_profile(self):
         return "16.04"
+
+    def parse_license(self):
+        return None
 
     def parse_python_template_version(self):
         return '3.5'

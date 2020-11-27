@@ -22,11 +22,10 @@ class Wiff(Binary):
     edam_data = "data_2536"
     edam_format = "format_3710"
     file_ext = 'wiff'
-    allow_datatype_change = False
     composite_type = 'auto_primary_file'
 
     def __init__(self, **kwd):
-        Binary.__init__(self, **kwd)
+        super().__init__(**kwd)
 
         self.add_composite_file(
             'wiff',
@@ -47,9 +46,9 @@ class Wiff(Binary):
             if composite_file.optional:
                 opt_text = ' (optional)'
             if composite_file.get('description'):
-                rval.append('<li><a href="%s" type="text/plain">%s (%s)</a>%s</li>' % (fn, fn, composite_file.get('description'), opt_text))
+                rval.append('<li><a href="{}" type="text/plain">{} ({})</a>{}</li>'.format(fn, fn, composite_file.get('description'), opt_text))
             else:
-                rval.append('<li><a href="%s" type="text/plain">%s</a>%s</li>' % (fn, fn, opt_text))
+                rval.append(f'<li><a href="{fn}" type="text/plain">{fn}</a>{opt_text}</li>')
         rval.append('</ul></div></html>')
         return "\n".join(rval)
 
@@ -79,7 +78,7 @@ class MzTab(Text):
     _version_re = r"(1)(\.[0-9])?(\.[0-9])?"
 
     def __init__(self, **kwd):
-        super(MzTab, self).__init__(**kwd)
+        super().__init__(**kwd)
 
     def set_peek(self, dataset, is_multi_byte=False):
         """Set the peek and blurb text"""
@@ -127,7 +126,7 @@ class MzTab2(MzTab):
     _man_mtd = {"mzTab-ID": None}
 
     def __init__(self, **kwd):
-        super(MzTab2, self).__init__(**kwd)
+        super().__init__(**kwd)
 
     def set_peek(self, dataset, is_multi_byte=False):
         """Set the peek and blurb text"""
@@ -155,7 +154,7 @@ class Kroenik(Tabular):
     file_ext = "kroenik"
 
     def __init__(self, **kwd):
-        super(Kroenik, self).__init__(**kwd)
+        super().__init__(**kwd)
         self.column_names = ["File", "First Scan", "Last Scan", "Num of Scans", "Charge", "Monoisotopic Mass", "Base Isotope Peak", "Best Intensity", "Summed Intensity", "First RTime", "Last RTime", "Best RTime", "Best Correlation", "Modifications"]
 
     def display_peek(self, dataset):
@@ -193,7 +192,7 @@ class PepList(Tabular):
     file_ext = "peplist"
 
     def __init__(self, **kwd):
-        super(PepList, self).__init__(**kwd)
+        super().__init__(**kwd)
         self.column_names = ["m/z", "rt(min)", "snr", "charge", "intensity"]
 
     def display_peek(self, dataset):
@@ -229,7 +228,7 @@ class PSMS(Tabular):
     file_ext = "psms"
 
     def __init__(self, **kwd):
-        super(PSMS, self).__init__(**kwd)
+        super().__init__(**kwd)
         self.column_names = ["PSMId", "score", "q-value", "posterior_error_prob", "peptide", "proteinIds"]
 
     def display_peek(self, dataset):
@@ -275,7 +274,7 @@ class PepXmlReport(Tabular):
     file_ext = "pepxml.tsv"
 
     def __init__(self, **kwd):
-        super(PepXmlReport, self).__init__(**kwd)
+        super().__init__(**kwd)
         self.column_names = ['Protein', 'Peptide', 'Assumed Charge', 'Neutral Pep Mass (calculated)', 'Neutral Mass', 'Retention Time', 'Start Scan', 'End Scan', 'Search Engine', 'PeptideProphet Probability', 'Interprophet Probability']
 
     def display_peek(self, dataset):
@@ -290,7 +289,7 @@ class ProtXmlReport(Tabular):
     comment_lines = 1
 
     def __init__(self, **kwd):
-        super(ProtXmlReport, self).__init__(**kwd)
+        super().__init__(**kwd)
         self.column_names = [
             "Entry Number", "Group Probability",
             "Protein", "Protein Link", "Protein Probability",
@@ -322,8 +321,8 @@ class Dta(TabularData):
         data_row = []
         data_lines = 0
         if dataset.has_data():
-            with open(dataset.file_name, 'r') as dtafile:
-                for line in dtafile:
+            with open(dataset.file_name) as dtafile:
+                for _ in dtafile:
                     data_lines += 1
 
         # Guess column types
@@ -393,7 +392,7 @@ class Dta2d(TabularData):
         data_lines = 0
         delim = None
         if dataset.has_data():
-            with open(dataset.file_name, 'r') as dtafile:
+            with open(dataset.file_name) as dtafile:
                 for line in dtafile:
                     if delim is None:
                         delim = self._parse_delimiter(line)
@@ -528,7 +527,7 @@ class Edta(TabularData):
         data_lines = 0
         delim = None
         if dataset.has_data():
-            with open(dataset.file_name, 'r') as dtafile:
+            with open(dataset.file_name) as dtafile:
                 for idx, line in enumerate(dtafile):
                     if idx == 0:
                         delim = self._parse_delimiter(line)
@@ -881,7 +880,7 @@ class SPLib(Msp):
     composite_type = 'auto_primary_file'
 
     def __init__(self, **kwd):
-        Msp.__init__(self, **kwd)
+        super().__init__(**kwd)
         self.add_composite_file('library.splib',
                                 description='Spectral Library. Contains actual library spectra',
                                 is_binary=False)
@@ -899,9 +898,9 @@ class SPLib(Msp):
             if composite_file.optional:
                 opt_text = ' (optional)'
             if composite_file.get('description'):
-                rval.append('<li><a href="%s" type="text/plain">%s (%s)</a>%s</li>' % (fn, fn, composite_file.get('description'), opt_text))
+                rval.append('<li><a href="{}" type="text/plain">{} ({})</a>{}</li>'.format(fn, fn, composite_file.get('description'), opt_text))
             else:
-                rval.append('<li><a href="%s" type="text/plain">%s</a>%s</li>' % (fn, fn, opt_text))
+                rval.append(f'<li><a href="{fn}" type="text/plain">{fn}</a>{opt_text}</li>')
         rval.append('</ul></div></html>')
         return "\n".join(rval)
 
@@ -970,11 +969,10 @@ class ImzML(Binary):
     """
     edam_format = "format_3682"
     file_ext = 'imzml'
-    allow_datatype_change = False
     composite_type = 'auto_primary_file'
 
     def __init__(self, **kwd):
-        Binary.__init__(self, **kwd)
+        super().__init__(**kwd)
 
         """The metadata"""
         self.add_composite_file(
@@ -995,9 +993,9 @@ class ImzML(Binary):
             fn = composite_name
             opt_text = ''
             if composite_file.get('description'):
-                rval.append('<li><a href="%s" type="text/plain">%s (%s)</a>%s</li>' % (fn, fn, composite_file.get('description'), opt_text))
+                rval.append('<li><a href="{}" type="text/plain">{} ({})</a>{}</li>'.format(fn, fn, composite_file.get('description'), opt_text))
             else:
-                rval.append('<li><a href="%s" type="text/plain">%s</a>%s</li>' % (fn, fn, opt_text))
+                rval.append(f'<li><a href="{fn}" type="text/plain">{fn}</a>{opt_text}</li>')
         rval.append('</ul></div></html>')
         return "\n".join(rval)
 
@@ -1008,11 +1006,10 @@ class Analyze75(Binary):
         http://www.imzml.org
     """
     file_ext = 'analyze75'
-    allow_datatype_change = False
     composite_type = 'auto_primary_file'
 
     def __init__(self, **kwd):
-        Binary.__init__(self, **kwd)
+        super().__init__(**kwd)
 
         """The header file. Provides information about dimensions, identification, and processing history."""
         self.add_composite_file(
@@ -1042,8 +1039,8 @@ class Analyze75(Binary):
             if composite_file.optional:
                 opt_text = ' (optional)'
             if composite_file.get('description'):
-                rval.append('<li><a href="%s" type="text/plain">%s (%s)</a>%s</li>' % (fn, fn, composite_file.get('description'), opt_text))
+                rval.append('<li><a href="{}" type="text/plain">{} ({})</a>{}</li>'.format(fn, fn, composite_file.get('description'), opt_text))
             else:
-                rval.append('<li><a href="%s" type="text/plain">%s</a>%s</li>' % (fn, fn, opt_text))
+                rval.append(f'<li><a href="{fn}" type="text/plain">{fn}</a>{opt_text}</li>')
         rval.append('</ul></div></html>')
         return "\n".join(rval)

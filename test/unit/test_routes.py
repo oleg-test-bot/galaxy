@@ -1,6 +1,6 @@
 from galaxy.util.bunch import Bunch
 from galaxy.web import url_for
-from galaxy.web.framework.webapp import WebApplication
+from galaxy.webapps.base.webapp import WebApplication
 from galaxy.webapps.galaxy import buildapp as galaxy_buildapp
 
 
@@ -108,4 +108,4 @@ def test_galaxy_routes():
 
 
 def assert_url_is(actual, expected):
-    assert actual == expected, "Expected URL [%s] but obtained [%s]" % (expected, actual)
+    assert actual == expected, f"Expected URL [{expected}] but obtained [{actual}]"

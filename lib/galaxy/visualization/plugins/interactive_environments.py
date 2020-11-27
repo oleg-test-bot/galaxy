@@ -1,3 +1,4 @@
+import configparser
 import json
 import logging
 import os
@@ -12,7 +13,6 @@ from subprocess import PIPE, Popen
 from sys import platform as _platform
 
 import yaml
-from six.moves import configparser, shlex_quote
 
 from galaxy import model, web
 from galaxy.containers import ContainerPort
@@ -38,7 +38,7 @@ ENV_OVERRIDE_CAPITALIZE = frozenset({
 log = logging.getLogger(__name__)
 
 
-class InteractiveEnvironmentRequest(object):
+class InteractiveEnvironmentRequest:
 
     def __init__(self, trans, plugin):
         self.trans = trans
@@ -123,7 +123,7 @@ class InteractiveEnvironmentRequest(object):
             except AttributeError:
                 raise Exception("[{0}] Could not find allowed_images.yml, or image tag in {0}.ini file for ".format(self.attr.viz_id))
 
-        with open(fn, 'r') as handle:
+        with open(fn) as handle:
             self.allowed_images = [x['image'] for x in yaml.safe_load(handle)]
 
             if len(self.allowed_images) == 0:
@@ -131,7 +131,7 @@ class InteractiveEnvironmentRequest(object):
 
             self.default_image = self.allowed_images[0]
 
-    def load_deploy_config(self, default_dict={}):
+    def load_deploy_config(self):
         # For backwards compat, any new variables added to the base .ini file
         # will need to be recorded here. The configparser doesn't provide a
         # .get() that will ignore missing sections, so we must make use of
@@ -145,7 +145,7 @@ class InteractiveEnvironmentRequest(object):
             'docker_galaxy_temp_dir': None,
             'docker_connect_port': None,
         }
-        viz_config = configparser.SafeConfigParser(default_dict)
+        viz_config = configparser.ConfigParser(default_dict)
         conf_path = os.path.join(self.attr.our_config_dir, self.attr.viz_id + ".ini")
         if not os.path.exists(conf_path):
             conf_path = "%s.sample" % conf_path
@@ -266,7 +266,7 @@ class InteractiveEnvironmentRequest(object):
         if env_override is None:
             env_override = {}
         conf = self.get_conf_dict()
-        conf = dict([(key.upper(), item) for key, item in conf.items()])
+        conf = {key.upper(): item for key, item in conf.items()}
         for key, item in env_override.items():
             if key in ENV_OVERRIDE_CAPITALIZE:
                 key = key.upper()
@@ -275,7 +275,7 @@ class InteractiveEnvironmentRequest(object):
 
     def _get_import_volume_for_run(self):
         if self.use_volumes and self.attr.import_volume:
-            return '{temp_dir}:/import/'.format(temp_dir=self.temp_dir)
+            return f'{self.temp_dir}:/import/'
         return ''
 
     def _get_name_for_run(self):
@@ -304,7 +304,7 @@ class InteractiveEnvironmentRequest(object):
             # --user="$(id -u):$(id -g)"
             # https://docs.docker.com/engine/reference/run/#user
             # -e USER_UID=$(id -u) -e USER_GID=$(id -g)
-            uid_gid_subs = {"$(id -u)": "{}".format(os.geteuid()), "$(id -g)": "{}".format(os.getgid())}
+            uid_gid_subs = {"$(id -u)": f"{os.geteuid()}", "$(id -g)": f"{os.getgid()}"}
             subs = sorted(uid_gid_subs)
             regex = re.compile('|'.join(map(re.escape, subs)))
             return regex.sub(lambda match: uid_gid_subs[match.group(0)], cmd_inject)
@@ -393,7 +393,7 @@ class InteractiveEnvironmentRequest(object):
             decoded_id = self.trans.security.decode_id(id)
             dataset = self.trans.sa_session.query(model.HistoryDatasetAssociation).get(decoded_id)
             # TODO: do we need to check if the user has access?
-            volumes.append(self.volume('/import/[{0}] {1}.{2}'.format(dataset.id, dataset.name, dataset.ext), dataset.get_file_name()))
+            volumes.append(self.volume(f'/import/[{dataset.id}] {dataset.name}.{dataset.ext}', dataset.get_file_name()))
         return volumes
 
     def _find_port_mapping(self, port_mappings):
@@ -428,16 +428,16 @@ class InteractiveEnvironmentRequest(object):
 
             redacted_command = [make_safe(x) for x in raw_cmd]
 
-        log.info("Starting docker container for IE {0} with command [{1}]".format(
+        log.info("Starting docker container for IE {} with command [{}]".format(
             self.attr.viz_id,
-            ' '.join(shlex_quote(x) for x in redacted_command)
+            ' '.join(shlex.quote(x) for x in redacted_command)
         ))
         p = Popen(raw_cmd, stdout=PIPE, stderr=PIPE, close_fds=True)
         stdout, stderr = p.communicate()
         stdout = unicodify(stdout)
         stderr = unicodify(stderr)
         if p.returncode != 0:
-            log.error("Container Launch error\n\n%s\n%s" % (stdout, stderr))
+            log.error(f"Container Launch error\n\n{stdout}\n{stderr}")
             return None
         else:
             container_id = stdout.strip()
@@ -542,15 +542,15 @@ class InteractiveEnvironmentRequest(object):
         :returns: inspect_data, a dict of docker inspect output
         """
         raw_cmd = self.base_docker_cmd('inspect') + [container_id]
-        log.info("Inspecting docker container {0} with command [{1}]".format(
+        log.info("Inspecting docker container {} with command [{}]".format(
             container_id,
-            ' '.join(shlex_quote(x) for x in raw_cmd)
+            ' '.join(shlex.quote(x) for x in raw_cmd)
         ))
 
         p = Popen(raw_cmd, stdout=PIPE, stderr=PIPE, close_fds=True)
         stdout, stderr = p.communicate()
         if p.returncode != 0:
-            log.error("Container Launch error\n\n%s\n%s" % (stdout, stderr))
+            log.error(f"Container Launch error\n\n{stdout}\n{stderr}")
             return None
 
         inspect_data = json.loads(stdout)

@@ -1,4 +1,3 @@
-import io
 import json
 import logging
 import os
@@ -46,7 +45,7 @@ def build_readme_files_dict(app, repository, changeset_revision, metadata, tool_
                         full_path_to_readme_file = os.path.abspath(relative_path_to_readme_file)
                     text = None
                     try:
-                        with io.open(full_path_to_readme_file, 'r', encoding='utf-8') as f:
+                        with open(full_path_to_readme_file, encoding='utf-8') as f:
                             text = f.read()
                     except Exception:
                         log.exception("Error reading README file '%s' from disk", relative_path_to_readme_file)
@@ -100,6 +99,6 @@ def get_readme_files_dict_for_display(app, tool_shed_url, repo_info_dict):
     tool_shed_url = common_util.get_tool_shed_url_from_tool_shed_registry(app, tool_shed_url)
     params = dict(name=name, owner=repository_owner, changeset_revision=changeset_revision)
     pathspec = ['repository', 'get_readme_files']
-    raw_text = url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+    raw_text = url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
     readme_files_dict = json.loads(raw_text)
     return readme_files_dict

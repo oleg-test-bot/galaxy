@@ -3,7 +3,10 @@ from collections import OrderedDict
 import packaging.version
 
 from galaxy.tool_util.deps import requirements
-from galaxy.tool_util.parser.util import DEFAULT_DELTA
+from galaxy.tool_util.parser.util import (
+    DEFAULT_DELTA,
+    DEFAULT_DELTA_FRAC
+)
 from .interface import (
     InputSource,
     PageSource,
@@ -26,6 +29,10 @@ class YamlToolSource(ToolSource):
         self.root_dict = root_dict
         self._source_path = source_path
         self._macro_paths = []
+
+    @property
+    def source_path(self):
+        return self._source_path
 
     def parse_id(self):
         return self.root_dict.get("id")
@@ -173,6 +180,9 @@ class YamlToolSource(ToolSource):
     def parse_profile(self):
         return self.root_dict.get("profile", "16.04")
 
+    def parse_license(self):
+        return self.root_dict.get("license")
+
     def parse_interactivetool(self):
         return self.root_dict.get("entry_points", [])
 
@@ -219,7 +229,8 @@ def _parse_test(i, test_dict):
         defaults = {
             'compare': 'diff',
             'lines_diff': 0,
-            'delta': int(DEFAULT_DELTA),
+            'delta': DEFAULT_DELTA,
+            'delta_frac': DEFAULT_DELTA_FRAC,
             'sort': False,
         }
         # TODO

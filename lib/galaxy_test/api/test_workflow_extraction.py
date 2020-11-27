@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import functools
 import operator
 from collections import namedtuple
@@ -12,7 +10,7 @@ from .test_workflows import BaseWorkflowsApiTestCase
 class WorkflowExtractionApiTestCase(BaseWorkflowsApiTestCase):
 
     def setUp(self):
-        super(WorkflowExtractionApiTestCase, self).setUp()
+        super().setUp()
         self.history_id = self.dataset_populator.new_history()
 
     @skip_without_tool("cat1")
@@ -252,6 +250,29 @@ test_data:
         collection_step = self._get_steps_of_type(downloaded_workflow, "data_collection_input", expected_len=1)[0]
         collection_step_state = loads(collection_step["tool_state"])
         self.assertEqual(collection_step_state["collection_type"], "list:paired")
+
+    @skip_without_tool("cat_list")
+    @skip_without_tool("collection_creates_dynamic_nested")
+    def test_subcollection_reduction(self):
+        jobs_summary = self._run_jobs("""
+class: GalaxyWorkflow
+steps:
+  creates_nested_list:
+    tool_id: collection_creates_dynamic_nested
+  reduce_nested_list:
+    tool_id: cat_list
+    in:
+      input1: creates_nested_list/list_output
+""")
+        job1_id = self._job_id_for_tool(jobs_summary.jobs, "cat_list")
+        job2_id = self._job_id_for_tool(jobs_summary.jobs, "collection_creates_dynamic_nested")
+        self._extract_and_download_workflow(
+            reimport_as="test_extract_workflows_with_subcollection_reduction",
+            dataset_collection_ids=["1"],
+            job_ids=[job1_id, job2_id],
+        )
+        # TODO: refactor workflow extraction to not rely on HID, so we can actually properly connect
+        # this workflow
 
     @skip_without_tool("collection_split_on_column")
     def test_extract_workflow_with_output_collections(self):
@@ -538,7 +559,7 @@ test_data:
         return sorted(steps, key=operator.itemgetter("id"))
 
     def __job_id(self, history_id, dataset_id):
-        url = "histories/%s/contents/%s/provenance" % (history_id, dataset_id)
+        url = f"histories/{history_id}/contents/{dataset_id}/provenance"
         prov_response = self._get(url, data=dict(follow=False))
         self._assert_status_code_is(prov_response, 200)
         return prov_response.json()["job_id"]

@@ -1,11 +1,9 @@
 """
 Determine what optional dependencies are needed.
 """
-from __future__ import print_function
 
 import sys
-from os.path import dirname, join
-from xml.etree import ElementTree
+from os.path import dirname, exists, join
 
 import pkg_resources
 import yaml
@@ -13,6 +11,8 @@ import yaml
 from galaxy.containers import parse_containers_config
 from galaxy.util import (
     asbool,
+    etree,
+    parse_xml,
     which,
 )
 from galaxy.util.properties import (
@@ -21,22 +21,25 @@ from galaxy.util.properties import (
 )
 
 
-class ConditionalDependencies(object):
-    def __init__(self, config_file):
+class ConditionalDependencies:
+    def __init__(self, config_file, config=None):
         self.config_file = config_file
-        self.config = None
         self.job_runners = []
         self.authenticators = []
         self.object_stores = []
+        self.file_sources = []
         self.conditional_reqs = []
         self.container_interface_types = []
         self.job_rule_modules = []
         self.error_report_modules = []
+        if config is None:
+            self.config = load_app_properties(config_file=self.config_file)
+        else:
+            self.config = config
         self.parse_configs()
         self.get_conditional_requirements()
 
     def parse_configs(self):
-        self.config = load_app_properties(config_file=self.config_file)
 
         def load_job_config_dict(job_conf_dict):
             for runner in job_conf_dict.get("runners"):
@@ -58,34 +61,55 @@ class ConditionalDependencies(object):
             if '.xml' in job_conf_path:
                 try:
                     try:
-                        for plugin in ElementTree.parse(job_conf_path).find('plugins').findall('plugin'):
+                        for plugin in parse_xml(job_conf_path).find('plugins').findall('plugin'):
                             if 'load' in plugin.attrib:
                                 self.job_runners.append(plugin.attrib['load'])
-                    except (OSError, IOError):
+                    except OSError:
                         pass
                     try:
-                        for plugin in ElementTree.parse(job_conf_path).findall('.//destination/param[@id="rules_module"]'):
+                        for plugin in parse_xml(job_conf_path).findall('.//destination/param[@id="rules_module"]'):
                             self.job_rule_modules.append(plugin.text)
-                    except (OSError, IOError):
+                    except OSError:
                         pass
-                except ElementTree.ParseError:
+                except etree.ParseError:
                     pass
             else:
                 try:
-                    with open("job_conf_path", "r") as f:
+                    with open("job_conf_path") as f:
                         job_conf_dict = yaml.safe_load(f)
                     load_job_config_dict(job_conf_dict)
-                except (OSError, IOError):
+                except OSError:
                     pass
 
-        object_store_conf_xml = self.config.get(
+        object_store_conf_path = self.config.get(
             "object_store_config_file",
             join(dirname(self.config_file), 'object_store_conf.xml'))
         try:
-            for store in ElementTree.parse(object_store_conf_xml).iter('object_store'):
-                if 'type' in store.attrib:
-                    self.object_stores.append(store.attrib['type'])
-        except (OSError, IOError):
+            if '.xml' in object_store_conf_path:
+                for store in parse_xml(object_store_conf_path).iter('object_store'):
+                    if 'type' in store.attrib:
+                        self.object_stores.append(store.attrib['type'])
+            else:
+                with open(object_store_conf_path) as f:
+                    job_conf_dict = yaml.safe_load(f)
+
+                def collect_types(from_dict):
+                    if not isinstance(from_dict, dict):
+                        return
+
+                    if 'type' in from_dict:
+                        self.object_stores.append(from_dict['type'])
+
+                    for value in from_dict.values():
+                        if isinstance(value, list):
+                            for val in value:
+                                collect_types(val)
+                        else:
+                            collect_types(value)
+
+                collect_types(job_conf_dict)
+
+        except OSError:
             pass
 
         # Parse auth conf
@@ -93,11 +117,11 @@ class ConditionalDependencies(object):
             "auth_config_file",
             join(dirname(self.config_file), 'auth_conf.xml'))
         try:
-            for auth in ElementTree.parse(auth_conf_xml).findall('authenticator'):
+            for auth in parse_xml(auth_conf_xml).findall('authenticator'):
                 auth_type = auth.find('type')
                 if auth_type is not None:
                     self.authenticators.append(auth_type.text)
-        except (OSError, IOError):
+        except OSError:
             pass
 
         # Parse containers config
@@ -112,11 +136,22 @@ class ConditionalDependencies(object):
             "error_report_file",
             join(dirname(self.config_file), 'error_report.yml'))
         try:
-            with open(error_report_yml, "r") as f:
+            with open(error_report_yml) as f:
                 error_reporters = yaml.safe_load(f)
                 self.error_report_modules = [er.get('type', None) for er in error_reporters]
-        except (OSError, IOError):
+        except OSError:
             pass
+
+        # Parse file sources config
+        file_sources_conf_yml = self.config.get(
+            "file_sources_config_file",
+            join(dirname(self.config_file), 'file_sources_conf.yml'))
+        if exists(file_sources_conf_yml):
+            with open(file_sources_conf_yml) as f:
+                file_sources_conf = yaml.safe_load(f)
+        else:
+            file_sources_conf = []
+        self.file_sources = [c.get('type', None) for c in file_sources_conf]
 
     def get_conditional_requirements(self):
         crfile = join(dirname(__file__), 'conditional-requirements.txt')
@@ -177,6 +212,12 @@ class ConditionalDependencies(object):
 
     def check_python_irodsclient(self):
         return 'irods' in self.object_stores
+
+    def check_fs_dropboxfs(self):
+        return 'dropbox' in self.file_sources
+
+    def check_fs_webdavfs(self):
+        return 'webdav' in self.file_sources
 
     def check_watchdog(self):
         install_set = {'auto', 'True', 'true', 'polling'}

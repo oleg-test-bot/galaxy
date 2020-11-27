@@ -3,7 +3,6 @@
 Provides wrappers and utilities for working with MAF files and alignments.
 """
 # Dan Blankenberg
-from __future__ import print_function
 
 import functools
 import logging
@@ -17,7 +16,6 @@ from errno import EMFILE
 import bx.align.maf
 import bx.interval_index_file
 import bx.intervals
-from six.moves import xrange
 
 try:
     maketrans = str.maketrans
@@ -59,7 +57,7 @@ def tool_fail(msg="Unknown Error"):
     sys.exit("Fatal Error: %s" % msg)
 
 
-class TempFileHandler(object):
+class TempFileHandler:
     '''
     Handles creating, opening, closing, and deleting of Temp files, with a
     maximum number of files open at one time.
@@ -85,6 +83,7 @@ class TempFileHandler(object):
             if index is None:
                 index = len(self.files)
                 temp_kwds = dict(self.kwds)
+                temp_kwds['delete'] = False
                 temp_kwds.update(kwds)
                 # Being able to use delete=True here, would simplify a bit,
                 # but we support python2.4 in these tools
@@ -100,11 +99,11 @@ class TempFileHandler(object):
                         else:
                             raise e
                 tmp_file.close()
-                self.files.append(open(filename, 'w'))
+                self.files.append(open(filename, 'r+'))
             else:
                 while True:
                     try:
-                        self.files[index] = open(self.files[index].name, 'r')
+                        self.files[index] = open(self.files[index].name, 'r+')
                         break
                     except OSError as e:
                         if self.open_file_indexes and e.errno == EMFILE:
@@ -132,12 +131,12 @@ class TempFileHandler(object):
             self.files[index].flush()
 
     def __del__(self):
-        for i in xrange(len(self.files)):
+        for i in range(len(self.files)):
             self.close(i, delete=True)
 
 
 # an object corresponding to a reference layered alignment
-class RegionAlignment(object):
+class RegionAlignment:
 
     DNA_COMPLEMENT = maketrans("ACGTacgt", "TGCAtgca")
     MAX_SEQUENCE_SIZE = sys.maxsize  # Maximum length of sequence allowed
@@ -221,7 +220,7 @@ class GenomicRegionAlignment(RegionAlignment):
         self.end = end
 
 
-class SplicedAlignment(object):
+class SplicedAlignment:
 
     DNA_COMPLEMENT = maketrans("ACGTacgt", "TGCAtgca")
 
@@ -295,7 +294,7 @@ def maf_index_by_uid(maf_uid, index_location_file):
                     maf_files = fields[4].replace("\n", "").replace("\r", "").split(",")
                     return bx.align.maf.MultiIndexed(maf_files, keep_open=True, parse_e_rows=False)
                 except Exception as e:
-                    raise Exception('MAF UID (%s) found, but configuration appears to be malformed: %s' % (maf_uid, e))
+                    raise Exception(f'MAF UID ({maf_uid}) found, but configuration appears to be malformed: {e}')
         except Exception:
             pass
     return None
@@ -347,7 +346,7 @@ def build_maf_index_species_chromosomes(filename, index_species=None):
                         indexes.add(c.src, forward_strand_start, forward_strand_end, pos, max=c.src_size)
     except Exception as e:
         # most likely a bad MAF
-        log.debug('Building MAF index on %s failed: %s' % (filename, e))
+        log.debug(f'Building MAF index on {filename} failed: {e}')
         return (None, [], {}, 0)
     return (indexes, species, species_chromosomes, blocks)
 
@@ -427,7 +426,7 @@ def orient_block_by_region(block, src, region, force_strand=None):
 
 
 def get_oriented_chopped_blocks_for_region(index, src, region, species=None, mincols=0, force_strand=None):
-    for block, idx, offset in get_oriented_chopped_blocks_with_index_offset_for_region(index, src, region, species, mincols, force_strand):
+    for block, _, _ in get_oriented_chopped_blocks_with_index_offset_for_region(index, src, region, species, mincols, force_strand):
         yield block
 
 
@@ -457,8 +456,7 @@ def iter_blocks_split_by_species(block, species=None):
             for c in spec_comps:
                 newer_block = deepcopy(new_block)
                 newer_block.add_component(deepcopy(c))
-                for value in __split_components_by_species(components_by_species, newer_block):
-                    yield value
+                yield from __split_components_by_species(components_by_species, newer_block)
         else:
             # no more components to add, yield this block
             yield new_block
@@ -489,7 +487,7 @@ def iter_blocks_split_by_species(block, species=None):
 
 # generator yielding only chopped and valid blocks for a specified region
 def get_chopped_blocks_for_region(index, src, region, species=None, mincols=0):
-    for block, idx, offset in get_chopped_blocks_with_index_offset_for_region(index, src, region, species, mincols):
+    for block, _, _ in get_chopped_blocks_with_index_offset_for_region(index, src, region, species, mincols):
         yield block
 
 
@@ -513,7 +511,7 @@ def get_region_alignment(index, primary_species, chrom, start, end, strand='+', 
 def reduce_block_by_primary_genome(block, species, chromosome, region_start):
     # returns ( startIndex, {species:texts}
     # where texts' contents are reduced to only positions existing in the primary genome
-    src = "%s.%s" % (species, chromosome)
+    src = f"{species}.{chromosome}"
     ref = block.get_component_by_src(src)
     start_offset = ref.start - region_start
     species_texts = {}
@@ -534,7 +532,7 @@ def fill_region_alignment(alignment, index, primary_species, chrom, start, end, 
     region = bx.intervals.Interval(start, end)
     region.chrom = chrom
     region.strand = strand
-    primary_src = "%s.%s" % (primary_species, chrom)
+    primary_src = f"{primary_species}.{chrom}"
 
     # Order blocks overlaping this position by score, lowest first
     blocks = []
@@ -685,11 +683,11 @@ def remove_temp_index_file(index_filename):
 def get_fasta_header(component, attributes={}, suffix=None):
     header = ">%s(%s):%i-%i|" % (component.src, component.strand, component.get_forward_strand_start(), component.get_forward_strand_end())
     for key, value in attributes.items():
-        header = "%s%s=%s|" % (header, key, value)
+        header = f"{header}{key}={value}|"
     if suffix:
-        header = "%s%s" % (header, suffix)
+        header = f"{header}{suffix}"
     else:
-        header = "%s%s" % (header, src_split(component.src)[0])
+        header = "{}{}".format(header, src_split(component.src)[0])
     return header
 
 
@@ -728,7 +726,7 @@ def get_attributes_from_fasta_header(header):
 
 
 def iter_fasta_alignment(filename):
-    class fastaComponent(object):
+    class fastaComponent:
         def __init__(self, species, text=""):
             self.species = species
             self.text = text

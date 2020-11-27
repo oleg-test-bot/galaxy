@@ -1,12 +1,12 @@
 """
 API operations on User objects.
 """
+import copy
 import json
 import logging
 import re
 from collections import OrderedDict
 
-import six
 from markupsafe import escape
 from sqlalchemy import (
     false,
@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, BaseUIController, UsesFormDefinitionsMixin):
 
     def __init__(self, app):
-        super(UserAPIController, self).__init__(app)
+        super().__init__(app)
         self.user_manager = users.UserManager(app)
         self.user_serializer = users.UserSerializer(app)
         self.user_deserializer = users.UserDeserializer(app)
@@ -224,17 +224,17 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
         editing_someone_else = current_user != user_to_update
         is_admin = trans.api_inherit_admin or self.user_manager.is_admin(current_user)
         if editing_someone_else and not is_admin:
-            raise exceptions.InsufficientPermissionsException('you are not allowed to update that user', id=id)
+            raise exceptions.InsufficientPermissionsException('You are not allowed to update that user', id=id)
 
         self.user_deserializer.deserialize(user_to_update, payload, user=current_user, trans=trans)
         return self.user_serializer.serialize_to_view(user_to_update, view='detailed')
 
-    @web.require_admin
     @expose_api
     def delete(self, trans, id, **kwd):
         """
         DELETE /api/users/{id}
         delete the user with the given ``id``
+        Functionality restricted based on admin status
 
         :param id: the encoded id of the user to delete
         :type  id: str
@@ -242,14 +242,20 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
         :param purge: (optional) if True, purge the user
         :type  purge: bool
         """
-        user = self.get_user(trans, id)
-        purge = util.string_as_bool(kwd.get('purge', False))
-        if purge:
-            log.debug("Purging user %s" % user)
-            self.user_manager.purge(user)
+        user_to_update = self.user_manager.by_id(self.decode_id(id))
+        if trans.user_is_admin:
+            purge = util.string_as_bool(kwd.get('purge', False))
+            if purge:
+                log.debug("Purging user %s", user_to_update)
+                self.user_manager.purge(user_to_update)
+            else:
+                self.user_manager.delete(user_to_update)
         else:
-            self.user_manager.delete(user)
-        return self.user_serializer.serialize_to_view(user, view='detailed')
+            if trans.user == user_to_update:
+                self.user_manager.delete(user_to_update)
+            else:
+                raise exceptions.InsufficientPermissionsException('You may only delete your own account.', id=id)
+        return self.user_serializer.serialize_to_view(user_to_update, view='detailed')
 
     @web.require_admin
     @expose_api
@@ -292,18 +298,19 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
         # Build sections for different categories of inputs
         for item, value in preferences.items():
             if value is not None:
-                for input in value["inputs"]:
+                input_fields = copy.deepcopy(value["inputs"])
+                for input in input_fields:
                     help = input.get('help', '')
                     required = 'Required' if util.string_as_bool(input.get('required')) else ''
                     if help:
-                        input['help'] = "%s %s" % (help, required)
+                        input['help'] = f"{help} {required}"
                     else:
                         input['help'] = required
                     field = item + '|' + input['name']
                     for data_item in user.extra_preferences:
                         if field in data_item:
                             input['value'] = user.extra_preferences[data_item]
-                extra_pref_inputs.append({'type': 'section', 'title': value['description'], 'name': item, 'expanded': True, 'inputs': value['inputs']})
+                extra_pref_inputs.append({'type': 'section', 'title': value['description'], 'name': item, 'expanded': True, 'inputs': input_fields})
         return extra_pref_inputs
 
     @expose_api
@@ -486,13 +493,13 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
                 try:
                     user_address = trans.sa_session.query(trans.app.model.UserAddress).get(trans.security.decode_id(d['id']))
                 except Exception as e:
-                    raise exceptions.ObjectNotFound('Failed to access user address (%s). %s' % (d['id'], e))
+                    raise exceptions.ObjectNotFound('Failed to access user address ({}). {}'.format(d['id'], e))
             else:
                 user_address = trans.model.UserAddress()
                 trans.log_event('User address added')
             for field in AddressField.fields():
                 if str(field[2]).lower() == 'required' and not d.get(field[0]):
-                    raise exceptions.ObjectAttributeMissingException('Address %s: %s (%s) required.' % (index + 1, field[1], field[0]))
+                    raise exceptions.ObjectAttributeMissingException('Address {}: {} ({}) required.'.format(index + 1, field[1], field[0]))
                 setattr(user_address, field[0], str(d.get(field[0], '')))
             user_address.user = user
             user.addresses.append(user_address)
@@ -570,7 +577,7 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
 
     def _validate_email(self, email):
         ''' Validate email and username using regex '''
-        if email == '' or not isinstance(email, six.string_types):
+        if email == '' or not isinstance(email, str):
             return 'Please provide your email address.'
         if not re.match(r'^(([^<>()[\]\.,;:\s@"]+(\.[^<>()[\]\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$', email):
             return 'Please provide your valid email address.'
@@ -615,7 +622,7 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
                            'name': index,
                            'label': action.action,
                            'help': action.description,
-                           'options': list(set((r.name, r.id) for r in roles)),
+                           'options': list({(r.name, r.id) for r in roles}),
                            'value': [a.role.id for a in user.default_permissions if a.action == action.action]})
         return {'inputs': inputs}
 
@@ -681,7 +688,7 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
         for filter_name in filter_config:
             function = factory.build_filter_function(filter_name)
             if function is None:
-                errors['%s|%s' % (filter_type, filter_name)] = 'Filter function not found.'
+                errors[f'{filter_type}|{filter_name}'] = 'Filter function not found.'
 
             short_description, description = None, None
             doc_string = docstring_trim(function.__doc__)
@@ -744,33 +751,6 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
                    'readonly': True,
                    'help': ' An API key will allow you to access via web API. Please note that this key acts as an alternate means to access your account and should be treated with the same care as your login password.'}]
         return {'message': message, 'inputs': inputs}
-
-    @expose_api
-    def get_communication(self, trans, id, payload={}, **kwd):
-        """
-        Build communication server inputs.
-        """
-        user = self._get_user(trans, id)
-        return {'inputs': [{'name': 'enable',
-                            'type': 'boolean',
-                            'label': 'Enable communication',
-                            'value': user.preferences.get('communication_server', 'false')}]}
-
-    @expose_api
-    def set_communication(self, trans, id, payload={}, **kwd):
-        """
-        Allows the user to activate/deactivate the communication server.
-        """
-        user = self._get_user(trans, id)
-        enable = payload.get('enable', 'false')
-        if enable == 'true':
-            message = 'Your communication server has been activated.'
-        else:
-            message = 'Your communication server has been disabled.'
-        user.preferences['communication_server'] = enable
-        trans.sa_session.add(user)
-        trans.sa_session.flush()
-        return {'message': message}
 
     @expose_api
     def get_custom_builds(self, trans, id, payload={}, **kwd):
@@ -867,7 +847,7 @@ class UserAPIController(BaseAPIController, UsesTagsMixin, CreatesApiKeysMixin, B
                             lines_skipped += 1
                             continue
                         counter += 1
-                        f.write('%s\t%s\n' % (chrom, length))
+                        f.write(f'{chrom}\t{length}\n')
                 build_dict['len'] = new_len.id
                 build_dict['count'] = counter
             else:

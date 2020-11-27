@@ -33,7 +33,7 @@ class CloudAuthzController(BaseAPIController):
     """
 
     def __init__(self, app):
-        super(CloudAuthzController, self).__init__(app)
+        super().__init__(app)
         self.cloudauthz_manager = cloudauthzs.CloudAuthzManager(app)
         self.cloudauthz_serializer = cloudauthzs.CloudAuthzsSerializer(app)
         self.cloudauthz_deserializer = cloudauthzs.CloudAuthzsDeserializer(app)
@@ -44,7 +44,7 @@ class CloudAuthzController(BaseAPIController):
         * GET /api/cloud/authz
             Lists all the cloud authorizations user has defined.
 
-        :type  trans: galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans: galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans: Galaxy web transaction
 
         :param kwargs: empty dict
@@ -64,7 +64,7 @@ class CloudAuthzController(BaseAPIController):
         * POST /api/cloud/authz
             Request to store the payload as a cloudauthz (cloud authorization) configuration for a user.
 
-        :type  trans: galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans: galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans: Galaxy web transaction
 
         :type payload: dict
@@ -104,11 +104,11 @@ class CloudAuthzController(BaseAPIController):
             missing_arguments.append('config')
 
         authn_id = payload.get('authn_id', None)
-        if authn_id is None:
+        if authn_id is None and provider.lower() not in ["azure", "gcp"]:
             missing_arguments.append('authn_id')
 
         if len(missing_arguments) > 0:
-            log.debug(msg_template.format("missing required config {}".format(missing_arguments)))
+            log.debug(msg_template.format(f"missing required config {missing_arguments}"))
             raise RequestParameterMissingException('The following required arguments are missing in the payload: '
                                                    '{}'.format(missing_arguments))
 
@@ -118,16 +118,17 @@ class CloudAuthzController(BaseAPIController):
             log.debug(msg_template.format("invalid config type `{}`, expect `dict`".format(type(config))))
             raise RequestParameterInvalidException('Invalid type for the required `config` variable; expect `dict` '
                                                    'but received `{}`.'.format(type(config)))
-        try:
-            authn_id = self.decode_id(authn_id)
-        except Exception:
-            log.debug(msg_template.format("cannot decode authn_id `" + str(authn_id) + "`"))
-            raise MalformedId('Invalid `authn_id`!')
+        if authn_id:
+            try:
+                authn_id = self.decode_id(authn_id)
+            except Exception:
+                log.debug(msg_template.format("cannot decode authn_id `" + str(authn_id) + "`"))
+                raise MalformedId('Invalid `authn_id`!')
 
-        try:
-            trans.app.authnz_manager.can_user_assume_authn(trans, authn_id)
-        except Exception as e:
-            raise e
+            try:
+                trans.app.authnz_manager.can_user_assume_authn(trans, authn_id)
+            except Exception as e:
+                raise e
 
         # No two authorization configuration with
         # exact same key/value should exist.
@@ -147,7 +148,6 @@ class CloudAuthzController(BaseAPIController):
             )
             view = self.cloudauthz_serializer.serialize_to_view(new_cloudauthz, trans=trans, **self._parse_serialization_params(kwargs, 'summary'))
             log.debug('Created a new cloudauthz record for the user id `{}` '.format(str(trans.user.id)))
-            trans.response.status = '200'
             return view
         except Exception as e:
             log.exception(msg_template.format("exception while creating the new cloudauthz record"))
@@ -160,7 +160,7 @@ class CloudAuthzController(BaseAPIController):
         * DELETE /api/cloud/authz/{encoded_authz_id}
             Deletes the CloudAuthz record with the given ``encoded_authz_id`` from database.
 
-        :type  trans: galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans: galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans: Galaxy web transaction
 
         :type  encoded_authz_id:    string
@@ -200,7 +200,7 @@ class CloudAuthzController(BaseAPIController):
             With this API only the following attributes of a cloudauthz configuration
             can be updated: `authn_id`, `provider`, `config`, `deleted`.
 
-        :type  trans:               galaxy.web.framework.webapp.GalaxyWebTransaction
+        :type  trans:               galaxy.webapps.base.webapp.GalaxyWebTransaction
         :param trans:               Galaxy web transaction
 
         :type  encoded_authz_id:    string

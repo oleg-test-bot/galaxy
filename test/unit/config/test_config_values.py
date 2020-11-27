@@ -6,18 +6,54 @@ import pytest
 
 from galaxy import config
 from galaxy.util import listify
+from galaxy.web.formatting import expand_pretty_datetime_format
 
 TestData = namedtuple('TestData', ('key', 'expected', 'loaded'))
 
-# TODO: all these will be fixed
-DO_NOT_TEST = [
-    'database_connection',
-    'pretty_datetime_format',
-    'heartbeat_log',
-    'ftp_upload_dir_template',
-    'workflow_resource_params_mapper',
-    'amqp_internal_connection',
-]
+
+@pytest.fixture(scope='module')
+def appconfig():
+    return config.GalaxyAppConfiguration()
+
+
+@pytest.fixture
+def mock_config_file(monkeypatch):
+    # Patch this; otherwise tempfile.tempdir will be set, which is a global variable that
+    # defines the value of the default `dir` argument to the functions in Python's
+    # tempfile module - which breaks multiple tests.
+    monkeypatch.setattr(config.GalaxyAppConfiguration, '_override_tempdir', lambda a, b: None)
+    # Set this to return None to force the creation of base config directories
+    # in _set_config_directories(). Used to test the values of these directories only.
+    monkeypatch.setattr(config, 'find_config_file', lambda x: None)
+
+
+def test_root(appconfig):
+    assert appconfig.root == os.path.abspath('.')
+
+
+def test_common_base_config(appconfig):
+    assert appconfig.shed_tools_dir == os.path.join(appconfig.data_dir, 'shed_tools')
+    assert appconfig.sample_config_dir == os.path.join(appconfig.root, 'lib', 'galaxy', 'config', 'sample')
+
+
+def test_base_config_if_running_from_source(monkeypatch, mock_config_file):
+    # Simulated condition: running from source, config_file is None.
+    monkeypatch.setattr(config, 'running_from_source', True)
+    appconfig = config.GalaxyAppConfiguration()
+    assert not appconfig.config_file
+    assert appconfig.config_dir == os.path.join(appconfig.root, 'config')
+    assert appconfig.data_dir == os.path.join(appconfig.root, 'database')
+    assert appconfig.managed_config_dir == appconfig.config_dir
+
+
+def test_base_config_if_running_not_from_source(monkeypatch, mock_config_file):
+    # Simulated condition: running not from source, config_file is None.
+    monkeypatch.setattr(config, 'running_from_source', False)
+    appconfig = config.GalaxyAppConfiguration()
+    assert not appconfig.config_file
+    assert appconfig.config_dir == os.getcwd()
+    assert appconfig.data_dir == os.path.join(appconfig.config_dir, 'data')
+    assert appconfig.managed_config_dir == os.path.join(appconfig.data_dir, 'config')
 
 
 def listify_strip(value):
@@ -26,33 +62,38 @@ def listify_strip(value):
 
 class ExpectedValues:
 
-    RESOLVERS = {
-        'disable_library_comptypes': [''],  # TODO: we can do better
-        'mulled_channels': listify_strip,
-        'object_store_store_by': 'uuid',
-        'password_expiration_period': timedelta,
-        'persistent_communication_rooms': listify_strip,
-        'statsd_host': '',  # TODO: do we need '' as the default?
-        'tool_config_file': listify_strip,
-        'tool_data_table_config_path': listify_strip,
-        'tool_filters': listify_strip,
-        'tool_label_filters': listify_strip,
-        'tool_section_filters': listify_strip,
-        'toolbox_filter_base_modules': listify_strip,
-        'use_remote_user': None,  # TODO: should be False (config logic incorrect)
-        'user_library_import_symlink_whitelist': listify_strip,
-        'user_tool_section_filters': listify_strip,
-        'user_tool_filters': listify_strip,
-        'user_tool_label_filters': listify_strip,
-    }
-    # RESOLVERS provides expected values for config options.
-    # - key: config option
-    # - value: expected value or a callable. The callable will be called with a
-    #   single argument, which is the default value of the config option.
-
     def __init__(self, config):
         self._config = config
+        self._load_resolvers()
         self._load_paths()
+
+    def _load_resolvers(self):
+        self._resolvers = {
+            'amqp_internal_connection': self.get_expected_amqp_internal_connection,
+            'database_connection': self.get_expected_database_connection,
+            'disable_library_comptypes': [''],  # TODO: we can do better
+            'ftp_upload_dir_template': self.get_expected_ftp_upload_dir_template,
+            'mulled_channels': listify_strip,
+            'object_store_store_by': 'uuid',
+            'password_expiration_period': timedelta,
+            'pretty_datetime_format': expand_pretty_datetime_format,
+            'statsd_host': '',  # TODO: do we need '' as the default?
+            'tool_config_file': listify_strip,
+            'tool_data_table_config_path': listify_strip,
+            'tool_filters': listify_strip,
+            'tool_label_filters': listify_strip,
+            'tool_section_filters': listify_strip,
+            'toolbox_filter_base_modules': listify_strip,
+            'use_remote_user': None,  # TODO: should be False (config logic incorrect)
+            'user_library_import_symlink_allowlist': listify_strip,
+            'user_tool_filters': listify_strip,
+            'user_tool_label_filters': listify_strip,
+            'user_tool_section_filters': listify_strip,
+        }
+        # _resolvers provides expected values for config options.
+        # - key: config option
+        # - value: expected value or a callable. The callable will be called with a
+        #   single argument, which is the default value of the config option.
 
     def _load_paths(self):
         self._expected_paths = {
@@ -64,12 +105,15 @@ class ExpectedValues:
             'citation_cache_lock_dir': self._in_data_dir('citations/locks'),
             'cluster_files_directory': self._in_data_dir('pbs'),
             'config_dir': self._in_config_dir(),
+            'containers_config_file': self._in_config_dir('containers_conf.yml'),
             'data_dir': self._in_data_dir(),
             'data_manager_config_file': self._in_config_dir('data_manager_conf.xml'),
             'datatypes_config_file': self._in_sample_dir('datatypes_conf.xml.sample'),
             'dependency_resolvers_config_file': self._in_config_dir('dependency_resolvers_conf.xml'),
             'dynamic_proxy_session_map': self._in_data_dir('session_map.sqlite'),
+            'error_report_file': self._in_config_dir('error_report.yml'),
             'file_path': self._in_data_dir('objects'),
+            'file_sources_config_file': self._in_config_dir('file_sources_conf.yml'),
             'galaxy_data_manager_data_path': self._in_root_dir('tool-data'),
             'integrated_tool_panel_config': self._in_managed_config_dir('integrated_tool_panel.xml'),
             'interactivetools_map': self._in_data_dir('interactivetools_map.sqlite'),
@@ -78,11 +122,13 @@ class ExpectedValues:
             'job_metrics_config_file': self._in_sample_dir('job_metrics_conf.xml.sample'),
             'job_resource_params_file': self._in_config_dir('job_resource_params_conf.xml'),
             'len_file_path': self._in_root_dir('tool-data/shared/ucsc/chrom'),
+            'local_conda_mapping_file': self._in_config_dir('local_conda_mapping.yml'),
             'managed_config_dir': self._in_managed_config_dir(),
             'markdown_export_css': self._in_config_dir('markdown_export.css'),
             'markdown_export_css_invocation_reports': self._in_config_dir('markdown_export_invocation_reports.css'),
             'markdown_export_css_pages': self._in_config_dir('markdown_export_pages.css'),
             'migrated_tools_config': self._in_managed_config_dir('migrated_tools_conf.xml'),
+            'modules_mapping_files': self._in_config_dir('environment_modules_mapping.yml'),
             'mulled_resolution_cache_data_dir': self._in_data_dir('mulled/data'),
             'mulled_resolution_cache_lock_dir': self._in_data_dir('mulled/locks'),
             'new_file_path': self._in_data_dir('tmp'),
@@ -90,20 +136,23 @@ class ExpectedValues:
             'oidc_backends_config_file': self._in_config_dir('oidc_backends_config.xml'),
             'oidc_config_file': self._in_config_dir('oidc_config.xml'),
             'openid_consumer_cache_path': self._in_data_dir('openid_consumer_cache'),
-            'sanitize_whitelist_file': self._in_managed_config_dir('sanitize_whitelist.txt'),
+            'sanitize_allowlist_file': self._in_managed_config_dir('sanitize_allowlist.txt'),
             'shed_data_manager_config_file': self._in_managed_config_dir('shed_data_manager_conf.xml'),
             'shed_tool_config_file': self._in_managed_config_dir('shed_tool_conf.xml'),
             'shed_tool_data_path': self._in_root_dir('tool-data'),
             'shed_tool_data_table_config': self._in_managed_config_dir('shed_tool_data_table_conf.xml'),
             'template_cache_path': self._in_data_dir('compiled_templates'),
+            'tool_cache_data_dir': self._in_data_dir('tool_cache'),
             'tool_config_file': self._in_sample_dir('tool_conf.xml.sample'),
             'tool_data_path': self._in_root_dir('tool-data'),
             'tool_data_table_config_path': self._in_sample_dir('tool_data_table_conf.xml.sample'),
+            'tool_destinations_config_file': self._in_config_dir('tool_destinations.yml'),
             'tool_path': self._in_root_dir('tools'),
+            'tool_search_index_dir': self._in_data_dir('tool_search_index'),
             'tool_sheds_config_file': self._in_config_dir('tool_sheds_conf.xml'),
             'tool_test_data_directories': self._in_root_dir('test-data'),
+            'trs_servers_config_file': self._in_config_dir('trs_servers_conf.yml'),
             'user_preferences_extra_conf_path': self._in_config_dir('user_preferences_extra_conf.yml'),
-            'whitelist_file': self._in_config_dir('disposable_email_whitelist.conf'),
             'workflow_resource_params_file': self._in_config_dir('workflow_resource_params_conf.xml'),
             'workflow_schedulers_config_file': self._in_config_dir('workflow_schedulers_conf.xml'),
         }
@@ -139,68 +188,29 @@ class ExpectedValues:
         if key in self._expected_paths:
             value = self._expected_paths[key]
         # 2. AFTER resolving paths, apply resolver, if one exists
-        if key in ExpectedValues.RESOLVERS:
-            resolver = ExpectedValues.RESOLVERS[key]
+        if key in self._resolvers:
+            resolver = self._resolvers[key]
             if callable(resolver):
                 value = resolver(value)
             else:
                 value = resolver
         return value
 
+    def get_expected_database_connection(self, value):
+        return f'sqlite:///{self._config.data_dir}/universe.sqlite?isolation_level=IMMEDIATE'
 
-@pytest.fixture
-def mock_config_file(monkeypatch):
-    # Set this to return None to force the creation of base config directories
-    # in _set_config_directories(). Used to test the values of these directories only.
-    monkeypatch.setattr(config, 'find_config_file', lambda x: None)
+    def get_expected_ftp_upload_dir_template(self, value):
+        return '${ftp_upload_dir}%s${ftp_upload_dir_identifier}' % os.path.sep
 
-
-@pytest.fixture
-def mock_config_running_from_source(monkeypatch, mock_config_file):
-    # Simulated condition: running from source, config_file is None.
-    monkeypatch.setattr(config, 'running_from_source', True)
-
-
-@pytest.fixture
-def mock_config_running_not_from_source(monkeypatch, mock_config_file):
-    # Simulated condition: running not from source, config_file is None.
-    monkeypatch.setattr(config, 'running_from_source', False)
-
-
-@pytest.fixture
-def appconfig(monkeypatch):
-    monkeypatch.setattr(config.GalaxyAppConfiguration, '_override_tempdir', lambda a, b: None)
-    return config.GalaxyAppConfiguration()
-
-
-def test_root(appconfig):
-    assert appconfig.root == os.path.abspath('.')
-
-
-def test_base_config_if_running_from_source(mock_config_running_from_source, appconfig):
-    assert not appconfig.config_file
-    assert appconfig.config_dir == os.path.join(appconfig.root, 'config')
-    assert appconfig.data_dir == os.path.join(appconfig.root, 'database')
-    assert appconfig.managed_config_dir == appconfig.config_dir
-
-
-def test_base_config_if_running_not_from_source(mock_config_running_not_from_source, appconfig):
-    assert not appconfig.config_file
-    assert appconfig.config_dir == os.getcwd()
-    assert appconfig.data_dir == os.path.join(appconfig.config_dir, 'data')
-    assert appconfig.managed_config_dir == os.path.join(appconfig.data_dir, 'config')
-
-
-def test_common_base_config(appconfig):
-    assert appconfig.shed_tools_dir == os.path.join(appconfig.data_dir, 'shed_tools')
-    assert appconfig.sample_config_dir == os.path.join(appconfig.root, 'lib', 'galaxy', 'config', 'sample')
+    def get_expected_amqp_internal_connection(self, value):
+        return f'sqlalchemy+sqlite:///{self._config.data_dir}/control.sqlite?isolation_level=IMMEDIATE'
 
 
 def get_config_data():
     config.GalaxyAppConfiguration._override_tempdir = lambda a, b: None  # method must be mocked
     configuration = config.GalaxyAppConfiguration()
     ev = ExpectedValues(configuration)
-    items = ((k, v) for k, v in configuration.schema.app_schema.items() if k not in DO_NOT_TEST)
+    items = ((k, v) for k, v in configuration.schema.app_schema.items())
     for key, data in items:
         expected = ev.get_value(key, data)
         loaded = getattr(configuration, key)

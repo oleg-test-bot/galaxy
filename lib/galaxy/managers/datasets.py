@@ -5,9 +5,6 @@ import glob
 import logging
 import os
 
-from six import string_types
-
-import galaxy.datatypes.metadata
 from galaxy import (
     exceptions,
     model
@@ -35,7 +32,7 @@ class DatasetManager(base.ModelManager, secured.AccessibleManagerMixin, deletabl
     # TODO:?? get + error_if_uploading is common pattern, should upload check be worked into access/owed?
 
     def __init__(self, app):
-        super(DatasetManager, self).__init__(app)
+        super().__init__(app)
         self.permissions = DatasetRBACPermissions(app)
         # needed for admin test
         self.user_manager = users.UserManager(app)
@@ -56,7 +53,7 @@ class DatasetManager(base.ModelManager, secured.AccessibleManagerMixin, deletabl
         return dataset
 
     def copy(self, dataset, **kwargs):
-        raise galaxy.exceptions.NotImplemented('Datasets cannot be copied')
+        raise exceptions.NotImplemented('Datasets cannot be copied')
 
     def purge(self, dataset, flush=True):
         """
@@ -88,7 +85,7 @@ class DatasetManager(base.ModelManager, secured.AccessibleManagerMixin, deletabl
         """
         Is this dataset readable/viewable to user?
         """
-        if self.user_manager.is_admin(user, trans=kwargs.get("trans", None)):
+        if self.user_manager.is_admin(user, trans=kwargs.get("trans")):
             return True
         if self.has_access_permission(dataset, user):
             return True
@@ -108,7 +105,7 @@ class DatasetManager(base.ModelManager, secured.AccessibleManagerMixin, deletabl
 
 # TODO: SecurityAgentDatasetRBACPermissions( object ):
 
-class DatasetRBACPermissions(object):
+class DatasetRBACPermissions:
 
     def __init__(self, app):
         self.app = app
@@ -145,7 +142,7 @@ class DatasetSerializer(base.ModelSerializer, deletable.PurgableSerializerMixin)
     model_manager_class = DatasetManager
 
     def __init__(self, app):
-        super(DatasetSerializer, self).__init__(app)
+        super().__init__(app)
         self.dataset_manager = self.manager
         # needed for admin test
         self.user_manager = users.UserManager(app)
@@ -169,7 +166,7 @@ class DatasetSerializer(base.ModelSerializer, deletable.PurgableSerializerMixin)
         # could do visualizations and/or display_apps
 
     def add_serializers(self):
-        super(DatasetSerializer, self).add_serializers()
+        super().add_serializers()
         deletable.PurgableSerializerMixin.add_serializers(self)
 
         self.serializers.update({
@@ -190,7 +187,7 @@ class DatasetSerializer(base.ModelSerializer, deletable.PurgableSerializerMixin)
         If the config allows or the user is admin, return the file name
         of the file that contains this dataset's data.
         """
-        is_admin = self.user_manager.is_admin(user, trans=context.get("trans", None))
+        is_admin = self.user_manager.is_admin(user, trans=context.get("trans"))
         # expensive: allow config option due to cost of operation
         if is_admin or self.app.config.expose_dataset_path:
             if not dataset.purged:
@@ -201,7 +198,7 @@ class DatasetSerializer(base.ModelSerializer, deletable.PurgableSerializerMixin)
         """
         If the config allows or the user is admin, return the file path.
         """
-        is_admin = self.user_manager.is_admin(user, trans=context.get("trans", None))
+        is_admin = self.user_manager.is_admin(user, trans=context.get("trans"))
         # expensive: allow config option due to cost of operation
         if is_admin or self.app.config.expose_dataset_path:
             if not dataset.purged:
@@ -211,7 +208,7 @@ class DatasetSerializer(base.ModelSerializer, deletable.PurgableSerializerMixin)
     def serialize_permissions(self, dataset, key, user=None, **context):
         """
         """
-        trans = context.get("trans", None)
+        trans = context.get("trans")
         if not self.dataset_manager.permissions.manage.is_permitted(dataset, user, trans=trans):
             self.skip()
 
@@ -240,7 +237,7 @@ class DatasetAssociationManager(base.ModelManager,
     # NOTE: model_manager_class should be set in HDA/LDA subclasses
 
     def __init__(self, app):
-        super(DatasetAssociationManager, self).__init__(app)
+        super().__init__(app)
         self.dataset_manager = DatasetManager(app)
 
     def is_accessible(self, dataset_assoc, user, **kwargs):
@@ -261,7 +258,7 @@ class DatasetAssociationManager(base.ModelManager,
         # We need to ignore a potential flush=False here and force the flush
         # so that job cleanup associated with stop_creating_job will see
         # the dataset as purged.
-        super(DatasetAssociationManager, self).purge(dataset_assoc, flush=True)
+        super().purge(dataset_assoc, flush=True)
 
         # stop any jobs outputing the dataset_assoc
         self.stop_creating_job(dataset_assoc)
@@ -272,7 +269,7 @@ class DatasetAssociationManager(base.ModelManager,
         return dataset_assoc
 
     def by_user(self, user):
-        raise galaxy.exceptions.NotImplemented('Abstract Method')
+        raise exceptions.NotImplemented('Abstract Method')
 
     # .... associated job
     def creating_job(self, dataset_assoc):
@@ -343,22 +340,11 @@ class DatasetAssociationManager(base.ModelManager,
             rval["modify_item_roles"] = modify_item_role_list
         return rval
 
-    def ok_to_edit_metadata(self, dataset_id):
-        # prevent modifying metadata when dataset is queued or running as input/output
-        # This code could be more efficient, i.e. by using mappers, but to prevent slowing down loading a History panel, we'll leave the code here for now
-        sa_session = self.app.model.context
-        for job_to_dataset_association in sa_session.query(
-                self.app.model.JobToInputDatasetAssociation).filter_by(dataset_id=dataset_id).all() \
-                + sa_session.query(self.app.model.JobToOutputDatasetAssociation).filter_by(dataset_id=dataset_id).all():
-            if job_to_dataset_association.job.state not in [job_to_dataset_association.job.states.OK, job_to_dataset_association.job.states.ERROR, job_to_dataset_association.job.states.DELETED]:
-                return False
-        return True
-
     def detect_datatype(self, trans, dataset_assoc):
         """Sniff and assign the datatype to a given dataset association (ldda or hda)"""
         data = trans.sa_session.query(self.model_class).get(dataset_assoc.id)
-        if data.datatype.allow_datatype_change:
-            if not self.ok_to_edit_metadata(data.id):
+        if data.datatype.is_datatype_change_allowed():
+            if not data.ok_to_edit_metadata():
                 raise exceptions.ItemAccessibilityException('This dataset is currently being used as input or output. You cannot change datatype until the jobs have completed or you have canceled them.')
             else:
                 path = data.dataset.file_name
@@ -373,7 +359,7 @@ class DatasetAssociationManager(base.ModelManager,
     def set_metadata(self, trans, dataset_assoc, overwrite=False, validate=True):
         """Trigger a job that detects and sets metadata on a given dataset association (ldda or hda)"""
         data = trans.sa_session.query(self.model_class).get(dataset_assoc.id)
-        if not self.ok_to_edit_metadata(data.id):
+        if not data.ok_to_edit_metadata():
             raise exceptions.ItemAccessibilityException('This dataset is currently being used as input or output. You cannot edit metadata until the jobs have completed or you have canceled them.')
         else:
             if overwrite:
@@ -443,7 +429,7 @@ class DatasetAssociationManager(base.ModelManager,
             self._set_permissions(trans, dataset_assoc, role_ids_dict)
 
     def _set_permissions(self, trans, dataset_assoc, roles_dict):
-        raise galaxy.exceptions.NotImplemented()
+        raise exceptions.NotImplemented()
 
 
 class _UnflattenedMetadataDatasetAssociationSerializer(base.ModelSerializer,
@@ -451,10 +437,10 @@ class _UnflattenedMetadataDatasetAssociationSerializer(base.ModelSerializer,
 
     def __init__(self, app):
         self.dataset_serializer = DatasetSerializer(app)
-        super(_UnflattenedMetadataDatasetAssociationSerializer, self).__init__(app)
+        super().__init__(app)
 
     def add_serializers(self):
-        super(_UnflattenedMetadataDatasetAssociationSerializer, self).add_serializers()
+        super().add_serializers()
         deletable.PurgableSerializerMixin.add_serializers(self)
 
         self.serializers.update({
@@ -478,7 +464,7 @@ class _UnflattenedMetadataDatasetAssociationSerializer(base.ModelSerializer,
             # common to lddas and hdas - from mapping.py
             'copied_from_history_dataset_association_id'        : self.serialize_id,
             'copied_from_library_dataset_dataset_association_id': self.serialize_id,
-            'info'          : lambda i, k, **c: i.info.strip() if isinstance(i.info, string_types) else i.info,
+            'info'          : lambda i, k, **c: i.info.strip() if isinstance(i.info, str) else i.info,
             'blurb'         : lambda i, k, **c: i.blurb,
             'peek'          : lambda i, k, **c: i.display_peek() if i.peek and i.peek != 'no peek' else None,
 
@@ -523,12 +509,13 @@ class _UnflattenedMetadataDatasetAssociationSerializer(base.ModelSerializer,
         """
         meta_files = []
         for meta_type in dataset_assoc.metadata_file_types:
-            meta_files.append(
-                dict(file_type=meta_type,
-                     download_url=self.url_for('history_contents_metadata_file',
-                                               history_id=self.app.security.encode_id(dataset_assoc.history_id),
-                                               history_content_id=self.app.security.encode_id(dataset_assoc.id),
-                                               metadata_file=meta_type)))
+            if getattr(dataset_assoc.metadata, meta_type, None):
+                meta_files.append(
+                    dict(file_type=meta_type,
+                         download_url=self.url_for('history_contents_metadata_file',
+                                                   history_id=self.app.security.encode_id(dataset_assoc.history_id),
+                                                   history_content_id=self.app.security.encode_id(dataset_assoc.id),
+                                                   metadata_file=meta_type)))
         return meta_files
 
     def serialize_metadata(self, dataset_assoc, key, excluded=None, **context):
@@ -554,6 +541,8 @@ class _UnflattenedMetadataDatasetAssociationSerializer(base.ModelSerializer,
             # If no value for metadata, look in datatype for metadata.
             elif val is None and hasattr(dataset_assoc.datatype, name):
                 val = getattr(dataset_assoc.datatype, name)
+            if val is None and spec.get("optional"):
+                continue
             metadata[name] = val
 
         return metadata
@@ -597,7 +586,7 @@ class DatasetAssociationSerializer(_UnflattenedMetadataDatasetAssociationSeriali
     # TODO: remove this class - metadata should be a sub-object instead as in the superclass
 
     def add_serializers(self):
-        super(DatasetAssociationSerializer, self).add_serializers()
+        super().add_serializers()
         # remove the single nesting key here
         del self.serializers['metadata']
 
@@ -609,7 +598,7 @@ class DatasetAssociationSerializer(_UnflattenedMetadataDatasetAssociationSeriali
         # TODO: remove these when metadata is sub-object
         KEYS_HANDLED_SEPARATELY = ('metadata', )
         left_to_handle = self._pluck_from_list(keys, KEYS_HANDLED_SEPARATELY)
-        serialized = super(DatasetAssociationSerializer, self).serialize(dataset_assoc, keys, **context)
+        serialized = super().serialize(dataset_assoc, keys, **context)
 
         # add metadata directly to the dict instead of as a sub-object
         if 'metadata' in left_to_handle:
@@ -650,12 +639,13 @@ class DatasetAssociationSerializer(_UnflattenedMetadataDatasetAssociationSeriali
 class DatasetAssociationDeserializer(base.ModelDeserializer, deletable.PurgableDeserializerMixin):
 
     def add_deserializers(self):
-        super(DatasetAssociationDeserializer, self).add_deserializers()
+        super().add_deserializers()
         deletable.PurgableDeserializerMixin.add_deserializers(self)
 
         self.deserializers.update({
             'name' : self.deserialize_basestring,
             'info' : self.deserialize_basestring,
+            'datatype' : self.deserialize_datatype,
         })
         self.deserializable_keyset.update(self.deserializers.keys())
 
@@ -682,11 +672,28 @@ class DatasetAssociationDeserializer(base.ModelDeserializer, deletable.PurgableD
         # ...?
         return unwrapped_val
 
+    def deserialize_datatype(self, item, key, val, **context):
+        if not item.datatype.is_datatype_change_allowed():
+            raise exceptions.RequestParameterInvalidException("The current datatype does not allow datatype changes.")
+        target_datatype = self.app.datatypes_registry.get_datatype_by_extension(val)
+        if not target_datatype:
+            raise exceptions.RequestParameterInvalidException("The target datatype does not exist.")
+        if not target_datatype.is_datatype_change_allowed():
+            raise exceptions.RequestParameterInvalidException("The target datatype does not allow datatype changes.")
+        if not item.ok_to_edit_metadata():
+            raise exceptions.RequestParameterInvalidException("Dataset metadata could not be updated because it is used as input or output of a running job.")
+        item.change_datatype(val)
+        sa_session = self.app.model.context
+        sa_session.flush()
+        trans = context.get("trans")
+        self.app.datatypes_registry.set_external_metadata_tool.tool_action.execute(self.app.datatypes_registry.set_external_metadata_tool, trans, incoming={'input1': item}, overwrite=False)  # overwrite is False as per existing behavior
+        return item.datatype
+
 
 class DatasetAssociationFilterParser(base.ModelFilterParser, deletable.PurgableFiltersMixin):
 
     def _add_parsers(self):
-        super(DatasetAssociationFilterParser, self)._add_parsers()
+        super()._add_parsers()
         deletable.PurgableFiltersMixin._add_parsers(self)
 
         self.orm_filter_parsers.update({

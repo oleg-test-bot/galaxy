@@ -61,9 +61,9 @@ class GroupRolesAPIController(BaseAPIController):
                                 name=role.name,
                                 url=url_for('group_role', group_id=group_id, id=role_id))  # TODO Fix This
             if not item:
-                item = "role %s not in group %s" % (role.name, group.name)
+                item = f"role {role.name} not in group {group.name}"
         except Exception as e:
-            item = "Error in group_role API group %s role %s" % (group.name, role.name)
+            item = f"Error in group_role API group {group.name} role {role.name}"
             log.error(item + ": %s", unicodify(e))
         return item
 
@@ -95,7 +95,7 @@ class GroupRolesAPIController(BaseAPIController):
                             name=role.name,
                             url=url_for('group_role', group_id=group_id, id=role_id))
         except Exception as e:
-            item = "Error in group_role API Adding role %s to group %s" % (role.name, group.name)
+            item = f"Error in group_role API Adding role {role.name} to group {group.name}"
             log.error(item + ": %s", unicodify(e))
         return item
 
@@ -120,8 +120,8 @@ class GroupRolesAPIController(BaseAPIController):
                                 name=role.name,
                                 url=url_for('group_role', group_id=group_id, id=role_id))
             if not item:
-                item = "role %s not in group %s" % (role.name, group.name)
+                item = f"role {role.name} not in group {group.name}"
         except Exception as e:
-            item = "Error in group_role API Removing role %s from group %s" % (role.name, group.name)
+            item = f"Error in group_role API Removing role {role.name} from group {group.name}"
             log.error(item + ": %s", unicodify(e))
         return item

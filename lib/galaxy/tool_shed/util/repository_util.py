@@ -2,9 +2,9 @@ import logging
 import os
 import re
 import shutil
+from urllib.error import HTTPError
 
 from markupsafe import escape
-from six.moves.urllib.error import HTTPError
 from sqlalchemy import (
     and_,
     false,
@@ -173,7 +173,7 @@ def get_absolute_path_to_file_in_repository(repo_files_dir, file_name):
     """Return the absolute path to a specified disk file contained in a repository."""
     stripped_file_name = basic_util.strip_path(file_name)
     file_path = None
-    for root, dirs, files in os.walk(repo_files_dir):
+    for root, _, files in os.walk(repo_files_dir):
         if root.find('.hg') < 0:
             for name in files:
                 if name == stripped_file_name:
@@ -284,7 +284,7 @@ def get_repo_info_tuple_contents(repo_info_tuple):
 
 
 def get_repository_admin_role_name(repository_name, repository_owner):
-    return '%s_%s_admin' % (str(repository_name), str(repository_owner))
+    return '{}_{}_admin'.format(str(repository_name), str(repository_owner))
 
 
 def get_repository_and_repository_dependencies_from_repo_info_dict(app, repo_info_dict):
@@ -400,7 +400,7 @@ def get_repository_for_dependency_relationship(app, tool_shed, name, owner, chan
         tool_shed_url = common_util.get_tool_shed_url_from_tool_shed_registry(app, tool_shed)
         params = dict(name=name, owner=owner, changeset_revision=changeset_revision)
         pathspec = ['repository', 'next_installable_changeset_revision']
-        text = util.url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+        text = util.url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
         if text:
             repository = get_installed_repository(app=app,
                                                   tool_shed=tool_shed,
@@ -523,7 +523,7 @@ def get_tool_shed_status_for_installed_repository(app, repository):
     params = dict(name=repository.name, owner=repository.owner, changeset_revision=repository.changeset_revision)
     pathspec = ['repository', 'status_for_installed_repository']
     try:
-        encoded_tool_shed_status_dict = util.url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+        encoded_tool_shed_status_dict = util.url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
         tool_shed_status_dict = encoding_util.tool_shed_decode(encoded_tool_shed_status_dict)
         return tool_shed_status_dict
     except HTTPError as e:
@@ -535,7 +535,7 @@ def get_tool_shed_status_for_installed_repository(app, repository):
         params['from_update_manager'] = True
         try:
             # The value of text will be 'true' or 'false', depending upon whether there is an update available for the installed revision.
-            text = util.url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+            text = util.url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
             return dict(revision_update=text)
         except Exception:
             # The required tool shed may be unavailable, so default the revision_update value to 'false'.
@@ -584,7 +584,7 @@ def repository_was_previously_installed(app, tool_shed_url, repository_name, rep
                   changeset_revision=changeset_revision,
                   from_tip=str(from_tip))
     pathspec = ['repository', 'previous_changeset_revisions']
-    text = util.url_get(tool_shed_url, password_mgr=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
+    text = util.url_get(tool_shed_url, auth=app.tool_shed_registry.url_auth(tool_shed_url), pathspec=pathspec, params=params)
     if text:
         changeset_revisions = util.listify(text)
         for previous_changeset_revision in changeset_revisions:

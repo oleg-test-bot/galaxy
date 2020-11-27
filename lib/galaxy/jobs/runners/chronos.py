@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import functools
 import logging
 
@@ -117,7 +115,7 @@ class ChronosJobRunner(AsynchronousJobRunner):
         if self.RUNNER_PARAM_SPEC_KEY not in kwargs:
             kwargs[self.RUNNER_PARAM_SPEC_KEY] = {}
         kwargs[self.RUNNER_PARAM_SPEC_KEY].update(self.RUNNER_PARAM_SPEC)
-        super(ChronosJobRunner, self).__init__(app, nworkers, **kwargs)
+        super().__init__(app, nworkers, **kwargs)
         protocol = 'http' if self.runner_params.get('insecure', True) else 'https'
         self._chronos_client = chronos.connect(
             self.runner_params['chronos'],
@@ -198,7 +196,7 @@ class ChronosJobRunner(AsynchronousJobRunner):
                 msg = 'Job {name!r} failed more than {retries!s} times'
                 reason = msg.format(name=job_name, retries=str(max_retries))
                 return self._mark_as_failed(job_state, reason)
-        reason = 'Job {name!r} not found'.format(name=job_name)
+        reason = f'Job {job_name!r} not found'
         return self._mark_as_failed(job_state, reason)
 
     def _mark_as_successful(self, job_state):
@@ -227,7 +225,7 @@ class ChronosJobRunner(AsynchronousJobRunner):
 
     @handle_exception_call
     def finish_job(self, job_state):
-        super(ChronosJobRunner, self).finish_job(job_state)
+        super().finish_job(job_state)
         self._chronos_client.delete(job_state.job_id)
 
     def parse_destination_params(self, params):
@@ -266,7 +264,7 @@ class ChronosJobRunner(AsynchronousJobRunner):
         jobs = self._chronos_client.list()
         job = [x for x in jobs if x['name'] == job_id]
         if len(job) > 1:
-            msg = 'Multiple jobs found with name {name!r}'.format(name=job_id)
+            msg = f'Multiple jobs found with name {job_id!r}'
             LOGGER.error(msg)
             raise ChronosRunnerException(msg)
         return job[0] if job else None

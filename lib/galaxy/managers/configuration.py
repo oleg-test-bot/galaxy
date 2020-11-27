@@ -20,7 +20,7 @@ class ConfigSerializer(base.ModelSerializer):
     """Configuration (galaxy.ini) settings viewable by all users"""
 
     def __init__(self, app):
-        super(ConfigSerializer, self).__init__(app)
+        super().__init__(app)
 
         self.default_view = 'all'
         self.add_view('all', list(self.serializers.keys()))
@@ -43,9 +43,9 @@ class ConfigSerializer(base.ModelSerializer):
             'is_admin_user'                     : lambda *a, **c: False,
             'brand'                             : _use_config,
             'display_galaxy_brand'              : _use_config,
-            # TODO: this doesn't seem right
             'logo_url'                          : lambda config, key, **context: self.url_for(config.get(key, '/')),
-            'logo_src'                          : lambda config, key, **context: self.url_for('/static/favicon.png'),
+            'logo_src'                          : lambda config, key, **context: self.url_for(config.get(key, '/static/favicon.png')),
+            'logo_src_secondary'                : lambda config, key, **context: self.url_for(config.get(key)) if config.get(key) else None,
             'terms_url'                         : _use_config,
             'myexperiment_target_url'           : _use_config,
             'wiki_url'                          : _use_config,
@@ -54,14 +54,11 @@ class ConfigSerializer(base.ModelSerializer):
             'screencasts_url'                   : _use_config,
             'citation_url'                      : _use_config,
             'support_url'                       : _use_config,
+            'quota_url'                         : _use_config,
             'helpsite_url'                      : _use_config,
             'lims_doc_url'                      : _defaults_to("https://usegalaxy.org/u/rkchak/p/sts"),
             'default_locale'                    : _use_config,
             'enable_openid'                     : _use_config,
-            'enable_communication_server'       : _use_config,
-            'communication_server_port'         : _use_config,
-            'communication_server_host'         : _use_config,
-            'persistent_communication_rooms'    : _use_config,
             'enable_tool_recommendations'       : _use_config,
             'tool_recommendation_model_path'    : _use_config,
             'admin_tool_recommendations_path'   : _use_config,
@@ -79,6 +76,9 @@ class ConfigSerializer(base.ModelSerializer):
             'ga_code'                           : _use_config,
             'enable_unique_workflow_defaults'   : _use_config,
             'enable_beta_markdown_export'       : _use_config,
+            'simplified_workflow_run_ui'        : _use_config,
+            'simplified_workflow_run_ui_target_history': _use_config,
+            'simplified_workflow_run_ui_job_cache': _use_config,
             'has_user_tool_filters'             : _defaults_to(False),
             # TODO: is there no 'correct' way to get an api url? controller='api', action='tools' is a hack
             # at any rate: the following works with path_prefix but is still brittle
@@ -104,6 +104,8 @@ class ConfigSerializer(base.ModelSerializer):
             'cookie_domain'                     : _use_config,
             'python'                            : _defaults_to((sys.version_info.major, sys.version_info.minor)),
             'select_type_workflow_threshold'    : _use_config,
+            'file_sources_configured'           : lambda config, key, **context: self.app.file_sources.custom_sources_configured,
+            'upload_from_form_button'           : _use_config,
         }
 
 
@@ -111,7 +113,7 @@ class AdminConfigSerializer(ConfigSerializer):
     """Configuration attributes viewable only by admin users"""
 
     def add_serializers(self):
-        super(AdminConfigSerializer, self).add_serializers()
+        super().add_serializers()
 
         def _defaults_to(default):
             return lambda config, key, **context: getattr(config, key, default)

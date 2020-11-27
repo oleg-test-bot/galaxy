@@ -6,6 +6,7 @@ from requests import (
     put
 )
 
+from galaxy_test.base.api_asserts import assert_object_id_error
 from galaxy_test.base.populators import skip_without_tool
 from ._framework import ApiTestCase
 
@@ -63,10 +64,10 @@ class UsersApiTestCase(ApiTestCase):
             self._assert_status_code_is(update_response, 403)
 
             # non-existent
-            no_user_id = self.security.encode_id(100)
+            no_user_id = '5d7db0757a2eb7ef'
             update_url = self._api_url("users/%s" % (no_user_id), use_key=True)
             update_response = put(update_url, data=json.dumps(dict(username=new_name)))
-            self._assert_status_code_is(update_response, 404)
+            assert_object_id_error(update_response)
 
     def test_admin_update(self):
         new_name = 'flexo'
@@ -163,18 +164,8 @@ class UsersApiTestCase(ApiTestCase):
         search_response = get(url).json()
         assert "cat1" in search_response
 
-    def test_communication(self):
-        user = self._setup_user(TEST_USER_EMAIL)
-        url = self.__url("communication/inputs", user)
-        self.assertEqual(self.__filter(get(url).json(), "enable", "value"), "false")
-        put(url, data=json.dumps(dict(enable="true")))
-        self.assertEqual(self.__filter(get(url).json(), "enable", "value"), "true")
-
-    def __filter(self, response, name, attr):
-        return [r[attr] for r in response["inputs"] if r["name"] == name][0]
-
     def __url(self, action, user):
-        return self._api_url("users/%s/%s" % (user["id"], action), params=dict(key=self.master_api_key))
+        return self._api_url("users/{}/{}".format(user["id"], action), params=dict(key=self.master_api_key))
 
     def __show(self, user):
         return self._get("users/%s" % (user['id']))

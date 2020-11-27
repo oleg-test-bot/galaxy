@@ -7,9 +7,8 @@ from within Galaxy.
 """
 import logging
 import re
-
-from six.moves.html_entities import name2codepoint
-from six.moves.html_parser import HTMLParser
+from html.entities import name2codepoint
+from html.parser import HTMLParser
 
 from galaxy import exceptions, model
 from galaxy.managers import base, sharable
@@ -18,6 +17,7 @@ from galaxy.managers.markdown_util import (
     ready_galaxy_markdown_for_export,
     ready_galaxy_markdown_for_import,
 )
+from galaxy.managers.workflows import WorkflowsManager
 from galaxy.model.item_attrs import UsesAnnotations
 from galaxy.util import unicodify
 from galaxy.util.sanitize_html import sanitize_html
@@ -26,33 +26,33 @@ log = logging.getLogger(__name__)
 
 # Copied from https://github.com/kurtmckee/feedparser
 _cp1252 = {
-    128: u'\u20ac',  # euro sign
-    130: u'\u201a',  # single low-9 quotation mark
-    131: u'\u0192',  # latin small letter f with hook
-    132: u'\u201e',  # double low-9 quotation mark
-    133: u'\u2026',  # horizontal ellipsis
-    134: u'\u2020',  # dagger
-    135: u'\u2021',  # double dagger
-    136: u'\u02c6',  # modifier letter circumflex accent
-    137: u'\u2030',  # per mille sign
-    138: u'\u0160',  # latin capital letter s with caron
-    139: u'\u2039',  # single left-pointing angle quotation mark
-    140: u'\u0152',  # latin capital ligature oe
-    142: u'\u017d',  # latin capital letter z with caron
-    145: u'\u2018',  # left single quotation mark
-    146: u'\u2019',  # right single quotation mark
-    147: u'\u201c',  # left double quotation mark
-    148: u'\u201d',  # right double quotation mark
-    149: u'\u2022',  # bullet
-    150: u'\u2013',  # en dash
-    151: u'\u2014',  # em dash
-    152: u'\u02dc',  # small tilde
-    153: u'\u2122',  # trade mark sign
-    154: u'\u0161',  # latin small letter s with caron
-    155: u'\u203a',  # single right-pointing angle quotation mark
-    156: u'\u0153',  # latin small ligature oe
-    158: u'\u017e',  # latin small letter z with caron
-    159: u'\u0178',  # latin capital letter y with diaeresis
+    128: '\u20ac',  # euro sign
+    130: '\u201a',  # single low-9 quotation mark
+    131: '\u0192',  # latin small letter f with hook
+    132: '\u201e',  # double low-9 quotation mark
+    133: '\u2026',  # horizontal ellipsis
+    134: '\u2020',  # dagger
+    135: '\u2021',  # double dagger
+    136: '\u02c6',  # modifier letter circumflex accent
+    137: '\u2030',  # per mille sign
+    138: '\u0160',  # latin capital letter s with caron
+    139: '\u2039',  # single left-pointing angle quotation mark
+    140: '\u0152',  # latin capital ligature oe
+    142: '\u017d',  # latin capital letter z with caron
+    145: '\u2018',  # left single quotation mark
+    146: '\u2019',  # right single quotation mark
+    147: '\u201c',  # left double quotation mark
+    148: '\u201d',  # right double quotation mark
+    149: '\u2022',  # bullet
+    150: '\u2013',  # en dash
+    151: '\u2014',  # em dash
+    152: '\u02dc',  # small tilde
+    153: '\u2122',  # trade mark sign
+    154: '\u0161',  # latin small letter s with caron
+    155: '\u203a',  # single right-pointing angle quotation mark
+    156: '\u0153',  # latin small ligature oe
+    158: '\u017e',  # latin small letter z with caron
+    159: '\u0178',  # latin capital letter y with diaeresis
 }
 
 
@@ -71,27 +71,33 @@ class PageManager(sharable.SharableModelManager, UsesAnnotations):
     def __init__(self, app, *args, **kwargs):
         """
         """
-        super(PageManager, self).__init__(app, *args, **kwargs)
+        super().__init__(app, *args, **kwargs)
+        self.workflow_manager = WorkflowsManager(app)
 
     def copy(self, trans, page, user, **kwargs):
         """
         """
-        pass
 
     def create(self, trans, payload):
         user = trans.get_user()
 
-        if not payload.get("title", None):
+        if not payload.get("title"):
             raise exceptions.ObjectAttributeMissingException("Page name is required")
-        elif not payload.get("slug", None):
+        elif not payload.get("slug"):
             raise exceptions.ObjectAttributeMissingException("Page id is required")
         elif not base.is_valid_slug(payload["slug"]):
             raise exceptions.ObjectAttributeInvalidException("Page identifier must consist of only lowercase letters, numbers, and the '-' character")
         elif trans.sa_session.query(trans.app.model.Page).filter_by(user=user, slug=payload["slug"], deleted=False).first():
             raise exceptions.DuplicatedSlugException("Page identifier must be unique")
 
-        content = payload.get("content", "")
-        content_format = payload.get("content_format", "html")
+        if payload.get("invocation_id"):
+            invocation_id = payload.get("invocation_id")
+            invocation_report = self.workflow_manager.get_invocation_report(trans, invocation_id)
+            content = invocation_report.get("markdown")
+            content_format = "markdown"
+        else:
+            content = payload.get("content", "")
+            content_format = payload.get("content_format", "html")
         content = self.rewrite_content_for_import(trans, content, content_format)
 
         # Create the new stored page
@@ -191,7 +197,7 @@ class PageSerializer(sharable.SharableModelSerializer):
     SINGLE_CHAR_ABBR = 'p'
 
     def __init__(self, app):
-        super(PageSerializer, self).__init__(app)
+        super().__init__(app)
         self.page_manager = PageManager(app)
 
         self.default_view = 'summary'
@@ -199,7 +205,7 @@ class PageSerializer(sharable.SharableModelSerializer):
         self.add_view('detailed', [])
 
     def add_serializers(self):
-        super(PageSerializer, self).add_serializers()
+        super().add_serializers()
         self.serializers.update({
         })
 
@@ -212,17 +218,17 @@ class PageDeserializer(sharable.SharableModelDeserializer):
     model_manager_class = PageManager
 
     def __init__(self, app):
-        super(PageDeserializer, self).__init__(app)
+        super().__init__(app)
         self.page_manager = self.manager
 
     def add_deserializers(self):
-        super(PageDeserializer, self).add_deserializers()
+        super().add_deserializers()
         self.deserializers.update({
         })
         self.deserializable_keyset.update(self.deserializers.keys())
 
 
-class PageContentProcessor(HTMLParser, object):
+class PageContentProcessor(HTMLParser):
     """
     Processes page content to produce HTML that is suitable for display.
     For now, processor renders embedded objects.
@@ -303,11 +309,11 @@ class PageContentProcessor(HTMLParser, object):
                 value = value.replace('>', '&gt;').replace('<', '&lt;').replace('"', '&quot;')
                 value = self.bare_ampersand.sub("&amp;", value)
                 uattrs.append((key, value))
-            strattrs = ''.join(' %s="%s"' % (k, v) for k, v in uattrs)
+            strattrs = ''.join(f' {k}="{v}"' for k, v in uattrs)
         if tag in self.elements_no_end_tag:
-            self.pieces.append('<%s%s />' % (tag, strattrs))
+            self.pieces.append(f'<{tag}{strattrs} />')
         else:
-            self.pieces.append('<%s%s>' % (tag, strattrs))
+            self.pieces.append(f'<{tag}{strattrs}>')
 
     def handle_endtag(self, tag):
         """

@@ -4,13 +4,9 @@ Contains the user interface in the Universe class
 
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 from markupsafe import escape
-from six.moves.urllib.parse import unquote
-from sqlalchemy import (
-    func,
-    or_
-)
 from sqlalchemy.orm.exc import NoResultFound
 
 from galaxy import (
@@ -43,7 +39,7 @@ class User(BaseUIController, UsesFormDefinitionsMixin, CreatesApiKeysMixin):
     installed_len_files = None
 
     def __init__(self, app):
-        super(User, self).__init__(app)
+        super().__init__(app)
         self.user_manager = users.UserManager(app)
 
     def __handle_role_and_group_auto_creation(self, trans, user, roles, auto_create_roles=False,
@@ -88,7 +84,7 @@ class User(BaseUIController, UsesFormDefinitionsMixin, CreatesApiKeysMixin):
         try:
             autoreg = trans.app.auth_manager.check_auto_registration(trans, login, password)
         except Conflict as conflict:
-            return "Auto-registration failed, {}".format(conflict), None
+            return f"Auto-registration failed, {conflict}", None
         user = None
         if autoreg["auto_reg"]:
             email = autoreg["email"]
@@ -134,14 +130,7 @@ class User(BaseUIController, UsesFormDefinitionsMixin, CreatesApiKeysMixin):
         status = None
         if not login or not password:
             return self.message_exception(trans, "Please specify a username and password.")
-        user = trans.sa_session.query(trans.app.model.User).filter(or_(
-            trans.app.model.User.table.c.email == login,
-            trans.app.model.User.table.c.username == login
-        )).first()
-        if not user and login.lower() != login:
-            user = trans.sa_session.query(trans.app.model.User).filter(
-                func.lower(trans.app.model.User.table.c.email) == login.lower()
-            ).first()
+        user = self.user_manager.get_user_by_identity(login)
         log.debug("trans.app.config.auth_config_file: %s" % trans.app.config.auth_config_file)
         if user is None:
             message, user = self.__autoregistration(trans, login, password)
@@ -200,13 +189,13 @@ class User(BaseUIController, UsesFormDefinitionsMixin, CreatesApiKeysMixin):
         """
         if email is None:  # User is coming from outside registration form, load email from trans
             if not trans.user:
-                trans.show_error_message("No session found, cannot send activation email.")
+                return "No session found, cannot send activation email.", None
             email = trans.user.email
         if username is None:  # User is coming from outside registration form, load email from trans
             username = trans.user.username
         is_activation_sent = self.user_manager.send_activation_email(trans, email, username)
         if is_activation_sent:
-            message = 'This account has not been activated yet. The activation link has been sent again. Please check your email address <b>%s</b> including the spam/trash folder. <a target="_top" href="%s">Return to the home page</a>.' % (escape(email), url_for('/'))
+            message = 'This account has not been activated yet. The activation link has been sent again. Please check your email address <b>{}</b> including the spam/trash folder. <a target="_top" href="{}">Return to the home page</a>.'.format(escape(email), url_for('/'))
         else:
             message = 'This account has not been activated yet but we are unable to send the activation link. Please contact your local Galaxy administrator. <a target="_top" href="%s">Return to the home page</a>.' % url_for('/')
             if trans.app.config.error_email_to is not None:

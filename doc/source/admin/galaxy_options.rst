@@ -239,7 +239,11 @@
 :Description:
     Where dataset files are stored. It must be accessible at the same
     path on any cluster nodes that will run Galaxy jobs, unless using
-    Pulsar.
+    Pulsar. The default value has been changed from 'files' to
+    'objects' as of 20.05; however, Galaxy will first check if the
+    'files' directory exists before using 'objects' as the default.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``objects``
 :Type: str
 
@@ -252,6 +256,8 @@
     Where temporary files are stored. It must be accessible at the
     same path on any cluster nodes that will run Galaxy jobs, unless
     using Pulsar.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``tmp``
 :Type: str
 
@@ -267,7 +273,9 @@
     config/tool_conf.xml does not exist). Can be a single file, a list
     of files, or (for backwards compatibility) a comma-separated list
     of files.
-:Default: ``config/tool_conf.xml``
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``tool_conf.xml``
 :Type: any
 
 
@@ -427,7 +435,7 @@
 :Description:
     conda channels to enable by default
     (https://conda.io/docs/user-guide/tasks/manage-channels.html)
-:Default: ``iuc,conda-forge,bioconda,defaults``
+:Default: ``conda-forge,bioconda,defaults``
 :Type: str
 
 
@@ -478,6 +486,34 @@
     packages.
 :Default: ``false``
 :Type: bool
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``local_conda_mapping_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Path to a file that provides a mapping from abstract packages to
+    concrete conda packages. See
+    `config/local_conda_mapping.yml.sample` for examples.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``local_conda_mapping.yml``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~
+``modules_mapping_files``
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Path to a file that provides a mapping from abstract packages to
+    locally installed modules. See
+    `config/environment_modules_mapping.yml.sample` for examples.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``environment_modules_mapping.yml``
+:Type: str
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -616,6 +652,18 @@
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``file_sources_config_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Configured FileSource plugins.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``file_sources_conf.yml``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ``enable_mulled_containers``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -719,7 +767,9 @@
     XML config file that contains data table entries for the
     ToolDataTableManager.  This file is manually # maintained by the
     Galaxy administrator (.sample used if default does not exist).
-:Default: ``config/tool_data_table_conf.xml``
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``tool_data_table_conf.xml``
 :Type: str
 
 
@@ -783,6 +833,18 @@
 :Type: str
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~
+``refgenie_config_file``
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    File containing refgenie configuration, e.g.
+    /path/to/genome_config.yaml. Can be used by refgenie backed tool
+    data tables.
+:Default: ``None``
+:Type: str
+
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ``build_sites_config_file``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -831,7 +893,9 @@
     If a datatype appears in multiple files, the last definition is
     used (though the first sniffer is used so limit sniffer
     definitions to one file).
-:Default: ``config/datatypes_conf.xml``
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``datatypes_conf.xml``
 :Type: str
 
 
@@ -938,6 +1002,8 @@
 :Description:
     If using a cluster, Galaxy will write job scripts and
     stdout/stderr to this directory.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``pbs``
 :Type: str
 
@@ -949,6 +1015,8 @@
 :Description:
     Mako templates are compiled as needed and cached for reuse, this
     directory is used for the cache
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``compiled_templates``
 :Type: str
 
@@ -1003,6 +1071,44 @@
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~
+``tool_cache_data_dir``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Tool related caching. Fully expanded tools and metadata will be
+    stored at this path. Per tool_conf cache locations can be
+    configured in (shed_)tool_conf.xml files using the
+    tool_cache_data_dir attribute.
+    The value of this option will be resolved with respect to
+    <data_dir>.
+:Default: ``tool_cache``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~
+``tool_search_index_dir``
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Directory in which the toolbox search index is stored. The value
+    of this option will be resolved with respect to <data_dir>.
+:Default: ``tool_search_index``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``delay_tool_initialization``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Set this to true to delay parsing of tool inputs and outputs until
+    they are needed. This results in faster startup times but uses
+    more memory when using forked Galaxy processes.
+:Default: ``false``
+:Type: bool
+
+
+~~~~~~~~~~~~~~~~~~~~~~~
 ``citation_cache_type``
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1024,6 +1130,8 @@
     fetched from external sources such as https://doi.org/ by Galaxy -
     the following parameters can be used to control the caching used
     to store this information.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``citations/data``
 :Type: str
 
@@ -1037,6 +1145,8 @@
     fetched from external sources such as https://doi.org/ by Galaxy -
     the following parameters can be used to control the caching used
     to store this information.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``citations/locks``
 :Type: str
 
@@ -1060,6 +1170,8 @@
 :Description:
     Data directory used by beaker for caching mulled resolution
     requests.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``mulled/data``
 :Type: str
 
@@ -1071,6 +1183,8 @@
 :Description:
     Lock directory used by beaker for caching mulled resolution
     requests.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``mulled/locks``
 :Type: str
 
@@ -1098,7 +1212,9 @@
     default will depend on how the object store is configured,
     starting with 20.05 Galaxy will try to default to 'uuid' if it can
     be sure this is a new Galaxy instance - but the default will be
-    'id' in many cases.
+    'id' in many cases. In particular, if the name of the directory
+    set in <file_path> is `objects`, the default will be set to
+    'uuid', otherwise it will be 'id'.
 :Default: ``None``
 :Type: str
 
@@ -1207,32 +1323,42 @@
 :Type: str
 
 
-~~~~~~~~~~~~~~~~~~
-``blacklist_file``
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``email_domain_blocklist_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :Description:
-    E-mail domains blacklist is used for filtering out users that are
-    using disposable email address during the registration.  If their
-    address domain matches any domain in the blacklist, they are
-    refused the registration.
-    Example value 'config/disposable_email_blacklist.conf'
+    E-mail domains blocklist is used for filtering out users that are
+    using disposable email addresses at registration.  If their
+    address's base domain matches any domain on the list, they are
+    refused registration. Address subdomains are ignored (both
+    'name@spam.com' and 'name@foo.spam.com' will match 'spam.com').
+    Example value 'email_blocklist.conf'
+    The value of this option will be resolved with respect to
+    <config_dir>.
 :Default: ``None``
 :Type: str
 
 
-~~~~~~~~~~~~~~~~~~
-``whitelist_file``
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``email_domain_allowlist_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :Description:
-    E-mail domains whitelist is used to specify allowed email address
+    E-mail domains allowlist is used to specify allowed email address
     domains. If the list is non-empty and a user attempts registration
     using an email address belonging to a domain that is not on the
-    list, registration will be enied. This is a more restrictive
-    option than <blacklist_file>, and therefore, in case
-    <whitelist_file> is defined, <blacklist_file> will be ignored.
-:Default: ``disposable_email_whitelist.conf``
+    list, registration will be denied. Unlike
+    <email_domain_allowlist_file> which matches the address's base
+    domain, here email addresses are matched against the full domain
+    (base + subdomain). This is a more restrictive option than
+    <email_domain_blocklist_file>, and therefore, in case
+    <email_domain_allowlist_file> is set and is not empty,
+    <email_domain_blocklist_file> will be ignored.
+    Example value 'email_allowlist.conf'
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``None``
 :Type: str
 
 
@@ -1381,9 +1507,10 @@
 ~~~~~~~~~~~~~~~~
 
 :Description:
-    This flag enables an AWS cost estimate for every job based on their runtime matrices.
-    CPU, RAM and runtime usage is mapped against AWS pricing table.
-    Please note, that those numbers are only estimates.
+    This flag enables an AWS cost estimate for every job based on
+    their runtime matrices. CPU, RAM and runtime usage is mapped
+    against AWS pricing table. Please note, that those numbers are
+    only estimates.
 :Default: ``false``
 :Type: bool
 
@@ -1405,6 +1532,8 @@
 
 :Description:
     Map for interactivetool proxy.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``interactivetools_map.sqlite``
 :Type: str
 
@@ -1486,6 +1615,23 @@
 :Type: str
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``trs_servers_config_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Allow import of workflows from the TRS servers configured in the
+    specified YAML or JSON file. The file should be a list with 'id',
+    'label', and 'api_url' for each entry. Optionally, 'link_url' and
+    'doc' may be be specified as well for each entry.
+    If this is null (the default), a simple configuration containing
+    just Dockstore will be used.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``trs_servers_conf.yml``
+:Type: str
+
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ``user_preferences_extra_conf_path``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1505,10 +1651,10 @@
 
 :Description:
     Default localization for Galaxy UI. Allowed values are listed at
-    the end of client/galaxy/scripts/nls/locale.js. With the default
-    value (auto), the locale will be automatically adjusted to the
-    user's navigator language. Users can override this settings in
-    their user preferences if the localization settings are enabled in
+    the end of client/src/nls/locale.js. With the default value
+    (auto), the locale will be automatically adjusted to the user's
+    navigator language. Users can override this settings in their user
+    preferences if the localization settings are enabled in
     user_preferences_extra_conf.yml
 :Default: ``auto``
 :Type: str
@@ -1566,6 +1712,26 @@
 :Description:
     The URL linked by the "Galaxy/brand" text.
 :Default: ``/``
+:Type: str
+
+
+~~~~~~~~~~~~
+``logo_src``
+~~~~~~~~~~~~
+
+:Description:
+    The brand image source.
+:Default: ``/static/favicon.png``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~
+``logo_src_secondary``
+~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    The custom brand image source.
+:Default: ``None``
 :Type: str
 
 
@@ -1934,6 +2100,8 @@
 :Description:
     The NodeJS dynamic proxy can use an SQLite database or a JSON file
     for IPC, set that here.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``session_map.sqlite``
 :Type: str
 
@@ -2177,17 +2345,17 @@
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``sanitize_whitelist_file``
+``sanitize_allowlist_file``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :Description:
-    Whitelist sanitization file. Datasets created by tools listed in
-    this file are trusted and will not have their HTML sanitized on
-    display.  This can be manually edited or manipulated through the
-    Admin control panel -- see "Manage Display Whitelist"
+    Datasets created by tools listed in this file are trusted and will
+    not have their HTML sanitized on display.  This can be manually
+    edited or manipulated through the Admin control panel -- see
+    "Manage Allowlist"
     The value of this option will be resolved with respect to
     <mutable_config_dir>.
-:Default: ``sanitize_whitelist.txt``
+:Default: ``sanitize_allowlist.txt``
 :Type: str
 
 
@@ -2244,6 +2412,11 @@
     use_printdebug.  It also causes the files used by PBS/SGE
     (submission script, output, and error) to remain on disk after the
     job is complete.
+    In addition, this will set uWSGI's `honour-stdin` option to
+    `true`; thus, preventing uWSGI from remapping stdin to `/dev/null`
+    and enabling debugging with tools like pdb. To keep uWSGI's
+    default setting, set `honor-stdin` to `false` in the `uwsgi`
+    section of this configuration file.
 :Default: ``false``
 :Type: bool
 
@@ -2329,8 +2502,7 @@
 :Description:
     Heartbeat log filename. Can accept the template variables
     {server_name} and {pid}
-    Sample default 'heartbeat_{server_name}.log'
-:Default: ``None``
+:Default: ``heartbeat_{server_name}.log``
 :Type: str
 
 
@@ -2459,7 +2631,7 @@
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``user_library_import_symlink_whitelist``
+``user_library_import_symlink_allowlist``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :Description:
@@ -2536,6 +2708,19 @@
 ~~~~~~~~~~~~~~~~~~~
 ``tool_name_boost``
 ~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Boosts are used to customize this instance's toolbox search. The
+    higher the boost, the more importance the scoring algorithm gives
+    to the given field.  Section refers to the tool group in the tool
+    panel.  Rest of the fields are tool's attributes.
+:Default: ``9.0``
+:Type: float
+
+
+~~~~~~~~~~~~~~~~~
+``tool_id_boost``
+~~~~~~~~~~~~~~~~~
 
 :Description:
     Boosts are used to customize this instance's toolbox search. The
@@ -2630,7 +2815,7 @@
     Enable/ disable Ngram-search for tools. It makes tool search
     results tolerant for spelling mistakes in the query by dividing
     the query into multiple ngrams and search for each ngram
-:Default: ``false``
+:Default: ``true``
 :Type: bool
 
 
@@ -2861,6 +3046,22 @@
 :Type: bool
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``upload_from_form_button``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    If 'always-on', add another button to tool form data inputs that
+    allow uploading data from the tool form in fewer clicks (at the
+    expense of making the form more complicated). This applies to
+    workflows as well.
+    Avoiding making this a boolean because we may add options such as
+    'in-single-form-view' or 'in-simplified-workflow-views'.
+    https://github.com/galaxyproject/galaxy/pull/9809/files#r461889109
+:Default: ``always-off``
+:Type: str
+
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ``allow_user_dataset_purge``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2923,11 +3124,11 @@
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~
-``fetch_url_whitelist``
+``fetch_url_allowlist``
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 :Description:
-    Whitelist for local network addresses for "Upload from URL"
+    List of allowed local network addresses for "Upload from URL"
     dialog. By default, Galaxy will deny access to the local network
     address space, to prevent users making requests to services which
     the administrator did not intend to expose. Previously, you could
@@ -3075,8 +3276,8 @@
     associated with scheduling workflows at the expense of increased
     total DB traffic because model objects are expunged from the SQL
     alchemy session between workflow invocation scheduling iterations.
-    Set to -1 to disable any such maximum (the default).
-:Default: ``-1``
+    Set to -1 to disable any such maximum.
+:Default: ``1000``
 :Type: int
 
 
@@ -3179,6 +3380,8 @@
 
 :Description:
     If OpenID is enabled, consumer cache directory to use.
+    The value of this option will be resolved with respect to
+    <data_dir>.
 :Default: ``openid_consumer_cache``
 :Type: str
 
@@ -3209,6 +3412,47 @@
     the workflow.
 :Default: ``false``
 :Type: bool
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``simplified_workflow_run_ui``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    If set to 'off' by default, always use the traditional workflow
+    form that renders all steps in the GUI and serializes the tool
+    state of all steps during invocation. Set to 'prefer' to default
+    to a simplified workflow UI that only renders the inputs if
+    possible (the workflow must have no disconnected runtime inputs
+    and not replacement parameters within tool steps). In the future
+    'force' may be added an option for Galaskio-style servers that
+    should only render simplified workflows.
+:Default: ``prefer``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``simplified_workflow_run_ui_target_history``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    When the simplified workflow run form is rendered, should the
+    invocation outputs be sent to the 'current' history or a 'new'
+    history.
+:Default: ``current``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``simplified_workflow_run_ui_job_cache``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    When the simplified workflow run form is rendered, should the
+    invocation use job caching. This isn't a boolean so an option for
+    'show-selection' can be added later.
+:Default: ``off``
+:Type: str
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3359,7 +3603,9 @@
 :Description:
     File where Data Managers are configured (.sample used if default
     does not exist).
-:Default: ``config/data_manager_conf.xml``
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``data_manager_conf.xml``
 :Type: str
 
 
@@ -3402,7 +3648,9 @@
     Jobs are run locally on the system on which Galaxy is started.
     Advanced job running capabilities can be configured through the
     job configuration file.
-:Default: ``config/job_conf.xml``
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``job_conf.xml``
 :Type: str
 
 
@@ -3514,6 +3762,22 @@
     same database.
 :Default: ``true``
 :Type: bool
+
+
+~~~~~~~~~~~~~~~~~~~~~
+``metadata_strategy``
+~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Determines how metadata will be set. Valid values are `directory`,
+    `extended` and `legacy`. In extended mode jobs will decide if a
+    tool run failed, the object stores configuration is serialized and
+    made available to the job and is used for writing output datasets
+    to the object store as part of the job and dynamic output
+    discovery (e.g. discovered datasets <discover_datasets>,
+    unpopulated collections, etc) happens as part of the job.
+:Default: ``directory``
+:Type: str
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3713,6 +3977,8 @@
     CSS file to apply to all Markdown exports to PDF - currently used
     by WeasyPrint during rendering an HTML export of the document to
     PDF.
+    The value of this option will be resolved with respect to
+    <config_dir>.
 :Default: ``markdown_export.css``
 :Type: str
 
@@ -3725,6 +3991,8 @@
     CSS file to apply to "Galaxy Page" exports to PDF. Generally
     prefer markdown_export_css, but this is here for deployments that
     would like to tailor different kinds of exports.
+    The value of this option will be resolved with respect to
+    <config_dir>.
 :Default: ``markdown_export_pages.css``
 :Type: str
 
@@ -3737,6 +4005,8 @@
     CSS file to apply to invocation report exports to PDF. Generally
     prefer markdown_export_css, but this is here for deployments that
     would like to tailor different kinds of exports.
+    The value of this option will be resolved with respect to
+    <config_dir>.
 :Default: ``markdown_export_invocation_reports.css``
 :Type: str
 
@@ -3848,11 +4118,13 @@
     from workflow_resource_params_file). If this this is a function
     reference it will be passed various inputs (workflow model object
     and user) and it should produce a list of input IDs. If it is a
-    path it is expected to an XML or YAML file describing how to map
-    group names to parameter descriptions (additional types of
+    path it is expected to be an XML or YAML file describing how to
+    map group names to parameter descriptions (additional types of
     mappings via these files could be implemented but haven't yet -
     for instance using workflow tags to do the mapping).
-:Default: ``config/workflow_resource_mapper_conf.yml``
+    Sample default path
+    'config/workflow_resource_mapper_conf.yml.sample'
+:Default: ``None``
 :Type: str
 
 
@@ -3992,47 +4264,6 @@
 :Type: str
 
 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``enable_communication_server``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:Description:
-    Galaxy real time communication server settings
-:Default: ``false``
-:Type: bool
-
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``communication_server_host``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:Description:
-    Galaxy real time communication server settings
-:Default: ``http://localhost``
-:Type: str
-
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``communication_server_port``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:Description:
-    Galaxy real time communication server settings
-:Default: ``7070``
-:Type: int
-
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-``persistent_communication_rooms``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-:Description:
-    persistent_communication_rooms is a comma-separated list of rooms
-    that should be always available.
-:Default: ``None``
-:Type: str
-
-
 ~~~~~~~~~~~~~~
 ``use_pbkdf2``
 ~~~~~~~~~~~~~~
@@ -4105,7 +4336,7 @@
 :Description:
     Set the number of predictions/recommendations to be made by the
     model
-:Default: ``20``
+:Default: ``10``
 :Type: int
 
 
@@ -4119,6 +4350,8 @@
     removed from the recommendations and another is for adding
     additional tools to be recommended along side those from the deep
     learning model.
+    The value of this option will be resolved with respect to
+    <config_dir>.
 :Default: ``tool_recommendations_overwrite.yml``
 :Type: str
 
@@ -4136,6 +4369,44 @@
     by the deep learning model are shown.
 :Default: ``false``
 :Type: bool
+
+
+~~~~~~~~~~~~~~~~~~~~~
+``error_report_file``
+~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Path to error reports configuration file.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``error_report.yml``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+``containers_config_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Path to container interface configuration file. The containers
+    interface is only used if `enable_beta_containers_interface`
+    config option is set.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``containers_conf.yml``
+:Type: str
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``tool_destinations_config_file``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Description:
+    Path to dynamic tool destinations configuration file.
+    The value of this option will be resolved with respect to
+    <config_dir>.
+:Default: ``tool_destinations.yml``
+:Type: str
 
 
 

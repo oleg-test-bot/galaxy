@@ -57,7 +57,7 @@ class InfernalCM(Text):
         Set the number of models and the version of CM file in dataset.
         """
         dataset.metadata.number_of_models = generic_util.count_special_lines('^INFERNAL', dataset.file_name)
-        with open(dataset.file_name, 'r') as f:
+        with open(dataset.file_name) as f:
             first_line = f.readline()
             if first_line.startswith("INFERNAL"):
                 dataset.metadata.cm_version = (first_line.split()[0]).replace('INFERNAL', '')
@@ -110,7 +110,6 @@ class Hmmer3(Hmmer):
 class HmmerPress(Binary):
     """Class for hmmpress database files."""
     file_ext = 'hmmpress'
-    allow_datatype_change = False
     composite_type = 'basic'
 
     def set_peek(self, dataset, is_multi_byte=False):
@@ -130,7 +129,7 @@ class HmmerPress(Binary):
             return "HMMER3 database (multiple files)"
 
     def __init__(self, **kwd):
-        Binary.__init__(self, **kwd)
+        super().__init__(**kwd)
         # Binary model
         self.add_composite_file('model.hmm.h3m', is_binary=True)
         # SSI index for binary model

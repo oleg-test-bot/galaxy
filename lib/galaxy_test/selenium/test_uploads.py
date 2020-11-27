@@ -154,7 +154,7 @@ PRJDA60709  SAMD00016382    DRX000480   ftp.sra.ebi.ac.uk/vol1/fastq/DRR000/DRR0
         self.upload_rule_start()
         self.upload_rule_set_data_type("Collection")
         self.upload_rule_set_input_type("History Dataset")
-        self.upload_rule_set_dataset("1:")
+        self.upload_rule_set_dataset(1)
         self.screenshot("rules_example_2_1_inputs")
         self.upload_rule_build()
         rule_builder = self.components.rule_builder
@@ -179,7 +179,7 @@ PRJDA60709  SAMD00016382    DRX000480   ftp.sra.ebi.ac.uk/vol1/fastq/DRR000/DRR0
         self.upload_rule_start()
         self.upload_rule_set_data_type("Collection")
         self.upload_rule_set_input_type("History Dataset")
-        self.upload_rule_set_dataset("1:")
+        self.upload_rule_set_dataset(1)
         self.screenshot("rules_example_3_1_inputs")
         self.upload_rule_build()
         rule_builder = self.components.rule_builder
@@ -273,7 +273,7 @@ PRJDA60709  SAMD00016382    DRX000480   ftp.sra.ebi.ac.uk/vol1/fastq/DRR000/DRR0
         self.upload_rule_start()
         self.upload_rule_set_data_type("Collection")
         self.upload_rule_set_input_type("History Dataset")
-        self.upload_rule_set_dataset("1:")
+        self.upload_rule_set_dataset(1)
         self.screenshot("rules_example_6_1_paste")
         self.upload_rule_build()
 
@@ -296,7 +296,7 @@ PRJDA60709  SAMD00016382    DRX000480   ftp.sra.ebi.ac.uk/vol1/fastq/DRR000/DRR0
         self.screenshot("rules_example_6_7_named")
 
     def _read_rules_test_data_file(self, name):
-        with open(self.test_data_resolver.get_filename(os.path.join("rules", name)), "r") as f:
+        with open(self.test_data_resolver.get_filename(os.path.join("rules", name))) as f:
             return f.read()
 
     def _scroll_to_end_of_table(self):
@@ -316,7 +316,7 @@ PRJDA60709  SAMD00016382    DRX000480   ftp.sra.ebi.ac.uk/vol1/fastq/DRR000/DRR0
         self.upload_rule_start()
         self.upload_rule_set_data_type("Collection")
         self.upload_rule_set_input_type("History Dataset")
-        self.upload_rule_set_dataset("1:")
+        self.upload_rule_set_dataset(1)
 
     # @selenium_test
     # def test_rules_example_5_matching_collections(self):

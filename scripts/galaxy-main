@@ -29,9 +29,8 @@ import signal
 import sys
 import threading
 from argparse import ArgumentParser
+from configparser import ConfigParser
 from logging.config import fileConfig
-
-from six.moves.configparser import ConfigParser
 
 try:
     from daemonize import Daemonize
@@ -108,7 +107,6 @@ def load_galaxy_app(
         **kwds
     )
     app.database_heartbeat.start()
-    app.queue_worker.bind_and_start()
     app.application_stack.log_startup()
     return app
 
@@ -180,7 +178,7 @@ def find_config(supplied_config, galaxy_root):
     return guess
 
 
-class GalaxyConfigBuilder(object):
+class GalaxyConfigBuilder:
     """ Generate paste-like configuration from supplied command-line arguments.
     """
 

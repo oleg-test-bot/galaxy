@@ -1,5 +1,5 @@
 """
-Object Store plugin for the Integrated Rule-Oriented Data Store (iRODS)
+Object Store plugin for the Integrated Rule-Oriented Data System (iRODS)
 """
 import logging
 import os
@@ -23,7 +23,7 @@ except ImportError:
     irods = None
 
 from galaxy.exceptions import ObjectInvalid, ObjectNotFound
-from galaxy.util import directory_hash_id, umask_fix_perms
+from galaxy.util import directory_hash_id, ExecutionTimer, umask_fix_perms
 from galaxy.util.path import safe_relpath
 from ..objectstore import DiskObjectStore
 
@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 
 
 def _config_xml_error(tag):
-    msg = 'No {tag} element in config XML tree'.format(tag=tag)
+    msg = f'No {tag} element in config XML tree'
     raise Exception(msg)
 
 
@@ -67,6 +67,7 @@ def parse_config_xml(config_xml):
         host = c_xml[0].get('host', None)
         port = int(c_xml[0].get('port', 0))
         timeout = int(c_xml[0].get('timeout', 30))
+        poolsize = int(c_xml[0].get('poolsize', 3))
 
         c_xml = config_xml.findall('cache')
         if not c_xml:
@@ -78,7 +79,7 @@ def parse_config_xml(config_xml):
         e_xml = config_xml.findall('extra_dir')
         if not e_xml:
             _config_xml_error('extra_dir')
-        extra_dirs = [dict(((k, e.get(k)) for k in attrs)) for e in e_xml]
+        extra_dirs = [{k: e.get(k) for k in attrs} for e in e_xml]
 
         return {
             'auth': {
@@ -94,7 +95,8 @@ def parse_config_xml(config_xml):
             'connection': {
                 'host': host,
                 'port': port,
-                'timeout': timeout
+                'timeout': timeout,
+                'poolsize': poolsize
             },
             'cache': {
                 'size': cache_size,
@@ -108,7 +110,7 @@ def parse_config_xml(config_xml):
         raise
 
 
-class CloudConfigMixin(object):
+class CloudConfigMixin:
 
     def _config_to_dict(self):
         return {
@@ -126,6 +128,7 @@ class CloudConfigMixin(object):
                 'host': self.host,
                 'port': self.port,
                 'timeout': self.timeout,
+                'poolsize': self.poolsize,
             },
             'cache': {
                 'size': self.cache_size,
@@ -136,14 +139,15 @@ class CloudConfigMixin(object):
 
 class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
     """
-    Object store that stores objects as data objects in an iRODS collections. A local cache
+    Object store that stores files as data objects in an iRODS Zone. A local cache
     exists that is used as an intermediate location for files between Galaxy and iRODS.
     """
 
     store_type = 'irods'
 
     def __init__(self, config, config_dict):
-        super(IRODSObjectStore, self).__init__(config, config_dict)
+        reload_timer = ExecutionTimer()
+        super().__init__(config, config_dict)
 
         auth_dict = config_dict.get('auth')
         if auth_dict is None:
@@ -182,6 +186,9 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         self.timeout = connection_dict.get('timeout')
         if self.timeout is None:
             _config_dict_error('connection->timeout')
+        self.poolsize = connection_dict.get('poolsize')
+        if self.poolsize is None:
+            _config_dict_error('connection->poolsize')
 
         cache_dict = config_dict['cache']
         if cache_dict is None:
@@ -193,42 +200,38 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         if self.staging_path is None:
             _config_dict_error('cache->path')
 
-        extra_dirs = dict((e['type'], e['path']) for e in config_dict.get('extra_dirs', []))
+        extra_dirs = {e['type']: e['path'] for e in config_dict.get('extra_dirs', [])}
         if not extra_dirs:
             _config_dict_error('extra_dirs')
         self.extra_dirs.update(extra_dirs)
 
-        self._initialize()
-
-    def __del__(self):
-        self.session.cleanup()
-
-    def _initialize(self):
         if irods is None:
             raise Exception(IRODS_IMPORT_MESSAGE)
 
         self.home = "/" + self.zone + "/home/" + self.username
 
-        self.session = self._configure_connection(host=self.host, port=self.port, user=self.username, password=self.password, zone=self.zone)
+        if irods is None:
+            raise Exception(IRODS_IMPORT_MESSAGE)
 
-    def _configure_connection(self, host='localhost', port='1247', user='rods', password='rods', zone='tempZone'):
-        with iRODSSession(host=host, port=port, user=user, password=password, zone=zone) as session:
-            # Set connection timeout
-            session.connection_timeout = self.timeout
-            # Throws NetworkException if connection fails
-            try:
-                session.pool.get_connection()
-            except NetworkException as e:
-                log.error('Could not create iRODS session: ' + str(e))
-                raise
-            return session
+        self.session = iRODSSession(host=self.host, port=self.port, user=self.username, password=self.password, zone=self.zone)
+        # Set connection timeout
+        self.session.connection_timeout = self.timeout
+        log.debug("irods __init__ %s", reload_timer)
+
+    def shutdown(self):
+        # This call will cleanup all the connections in the connection pool
+        # OSError sometimes happens on GitHub Actions, after the test has successfully completed. Ignore it if it happens.
+        try:
+            self.session.cleanup()
+        except OSError:
+            pass
 
     @classmethod
     def parse_xml(cls, config_xml):
         return parse_config_xml(config_xml)
 
     def to_dict(self):
-        as_dict = super(IRODSObjectStore, self).to_dict()
+        as_dict = super().to_dict()
         as_dict.update(self._config_to_dict())
         return as_dict
 
@@ -245,7 +248,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
 
     def _construct_path(self, obj, base_dir=None, dir_only=None, extra_dir=None, extra_dir_at_root=False, alt_name=None, obj_dir=False, **kwargs):
         # extra_dir should never be constructed from provided data but just
-        # make sure there are no shenannigans afoot
+        # make sure there are no shenanigans afoot
         if extra_dir and extra_dir != os.path.normpath(extra_dir):
             log.warning('extra_dir is not normalized: %s', extra_dir)
             raise ObjectInvalid("The requested object is invalid")
@@ -258,7 +261,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             # alt_name can contain parent directory references, but S3 will not
             # follow them, so if they are valid we normalize them out
             alt_name = os.path.normpath(alt_name)
-        rel_path = os.path.join(*directory_hash_id(obj.id))
+        rel_path = os.path.join(*directory_hash_id(self._get_object_id(obj)))
         if extra_dir is not None:
             if extra_dir_at_root:
                 rel_path = os.path.join(extra_dir, rel_path)
@@ -267,13 +270,13 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
 
         # for JOB_WORK directory
         if obj_dir:
-            rel_path = os.path.join(rel_path, str(obj.id))
+            rel_path = os.path.join(rel_path, str(self._get_object_id(obj)))
         if base_dir:
             base = self.extra_dirs.get(base_dir)
             return os.path.join(base, rel_path)
 
         if not dir_only:
-            rel_path = os.path.join(rel_path, alt_name if alt_name else "dataset_%s.dat" % obj.id)
+            rel_path = os.path.join(rel_path, alt_name if alt_name else "dataset_%s.dat" % self._get_object_id(obj))
         return rel_path
 
     def _get_cache_path(self, rel_path):
@@ -294,6 +297,9 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         except (DataObjectDoesNotExist, CollectionDoesNotExist):
             log.warn("Collection or data object (%s) does not exist", data_object_path)
             return -1
+        except NetworkException as e:
+            log.exception(e)
+            return -1
 
     # rel_path is file or folder?
     def _data_object_exists(self, rel_path):
@@ -308,7 +314,10 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             self.session.data_objects.get(data_object_path)
             return True
         except (DataObjectDoesNotExist, CollectionDoesNotExist):
-            log.warn("Collection or data object (%s) does not exist", data_object_path)
+            log.debug("Collection or data object (%s) does not exist", data_object_path)
+            return False
+        except NetworkException as e:
+            log.exception(e)
             return False
 
     def _in_cache(self, rel_path):
@@ -342,10 +351,13 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         except (DataObjectDoesNotExist, CollectionDoesNotExist):
             log.warn("Collection or data object (%s) does not exist", data_object_path)
             return False
+        except NetworkException as e:
+            log.exception(e)
+            return False
 
         if self.cache_size > 0 and data_obj.__sizeof__() > self.cache_size:
             log.critical("File %s is larger (%s) than the cache size (%s). Cannot download.",
-                         rel_path, data_obj.__sizeof__(), self.cache_size)
+                        rel_path, data_obj.__sizeof__(), self.cache_size)
             return False
 
         log.debug("Pulled data object '%s' into cache to %s", rel_path, self._get_cache_path(rel_path))
@@ -375,35 +387,41 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             # Check if the data object exists in iRODS
             collection_path = self.home + "/" + str(subcollection_name)
             data_object_path = collection_path + "/" + str(data_object_name)
-            exists = self.session.data_objects.exists(data_object_path)
-            if os.path.getsize(source_file) == 0 and exists:
-                log.debug("Wanted to push file '%s' to iRODS collection '%s' but its size is 0; skipping.", source_file, rel_path)
+            exists = False
+            try:
+                exists = self.session.data_objects.exists(data_object_path)
+
+                if os.path.getsize(source_file) == 0 and exists:
+                    log.debug("Wanted to push file '%s' to iRODS collection '%s' but its size is 0; skipping.", source_file, rel_path)
+                    return True
+
+                if from_string:
+                    data_obj = self.session.data_objects.create(data_object_path, self.resource, **options)
+                    with data_obj.open('w') as data_obj_fp:
+                        data_obj_fp.write(from_string)
+                    log.debug("Pushed data from string '%s' to collection '%s'", from_string, data_object_path)
+                else:
+                    start_time = datetime.now()
+                    log.debug("Pushing cache file '%s' of size %s bytes to collection '%s'", source_file, os.path.getsize(source_file), rel_path)
+
+                    # Create sub-collection first
+                    self.session.collections.create(collection_path, recurse=True)
+                    data_obj = self.session.data_objects.create(data_object_path, self.resource, **options)
+
+                    # Write to file in subcollection created above
+                    with open(source_file, 'rb') as content_file, data_obj.open('w') as data_obj_fp:
+                        for chunk in iter(partial(content_file.read, CHUNK_SIZE), b''):
+                            data_obj_fp.write(chunk)
+
+                    end_time = datetime.now()
+                    log.debug("Pushed cache file '%s' to collection '%s' (%s bytes transfered in %s sec)",
+                            source_file, rel_path, os.path.getsize(source_file), end_time - start_time)
                 return True
-            if from_string:
-                data_obj = self.session.data_objects.create(data_object_path, self.resource, **options)
-                with data_obj.open('w') as data_obj_fp:
-                    data_obj_fp.write(from_string)
-                log.debug("Pushed data from string '%s' to collection '%s'", from_string, data_object_path)
-            else:
-                start_time = datetime.now()
-                log.debug("Pushing cache file '%s' of size %s bytes to collection '%s'", source_file, os.path.getsize(source_file), rel_path)
+            except NetworkException as e:
+                log.exception(e)
+                return False
 
-                # Create sub-collection first
-                self.session.collections.create(collection_path, recurse=True)
-                data_obj = self.session.data_objects.create(data_object_path, self.resource, **options)
-
-                # Write to file in subcollection created above
-                with open(source_file, 'rb') as content_file, data_obj.open('w') as data_obj_fp:
-                    for chunk in iter(partial(content_file.read, CHUNK_SIZE), b''):
-                        data_obj_fp.write(chunk)
-
-                end_time = datetime.now()
-                log.debug("Pushed cache file '%s' to collection '%s' (%s bytes transfered in %s sec)",
-                          source_file, rel_path, os.path.getsize(source_file), end_time - start_time)
-            return True
-        else:
-            log.error("Tried updating key '%s' from source file '%s', but source file does not exist.",
-                      rel_path, source_file)
+        log.error("Tried updating key '%s' from source file '%s', but source file does not exist.", rel_path, source_file)
         return False
 
     def file_ready(self, obj, **kwargs):
@@ -421,35 +439,21 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         return False
 
     def _exists(self, obj, **kwargs):
-        in_cache = in_irods = False
         rel_path = self._construct_path(obj, **kwargs)
 
-        # Check cache
-        if self._in_cache(rel_path):
-            in_cache = True
-        # Check iRODS
-        in_irods = self._data_object_exists(rel_path)
+        # Check cache and irods
+        if self._in_cache(rel_path) or self._data_object_exists(rel_path):
+            return True
 
         # dir_only does not get synced so shortcut the decision
         dir_only = kwargs.get('dir_only', False)
         base_dir = kwargs.get('base_dir', None)
-        if dir_only:
-            if in_cache or in_irods:
-                return True
+        if dir_only and base_dir:
             # for JOB_WORK directory
-            elif base_dir:
-                if not os.path.exists(rel_path):
-                    os.makedirs(rel_path)
-                return True
-            else:
-                return False
-
-        if in_cache and not in_irods:
+            if not os.path.exists(rel_path):
+                os.makedirs(rel_path)
             return True
-        elif in_irods:
-            return True
-        else:
-            return False
+        return False
 
     def _create(self, obj, **kwargs):
         if not self._exists(obj, **kwargs):
@@ -460,7 +464,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             alt_name = kwargs.get('alt_name', None)
 
             # Construct hashed path
-            rel_path = os.path.join(*directory_hash_id(obj.id))
+            rel_path = os.path.join(*directory_hash_id(self._get_object_id(obj)))
 
             # Optionally append extra_dir
             if extra_dir is not None:
@@ -475,7 +479,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
                 os.makedirs(cache_dir)
 
             if not dir_only:
-                rel_path = os.path.join(rel_path, alt_name if alt_name else "dataset_%s.dat" % obj.id)
+                rel_path = os.path.join(rel_path, alt_name if alt_name else "dataset_%s.dat" % self._get_object_id(obj))
                 open(os.path.join(self.staging_path, rel_path), 'w').close()
                 self._push_to_irods(rel_path, from_string='')
 
@@ -492,7 +496,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             try:
                 return os.path.getsize(self._get_cache_path(rel_path))
             except OSError as ex:
-                log.info("Could not get size of file '%s' in local cache, will try S3. Error: %s", rel_path, ex)
+                log.info("Could not get size of file '%s' in local cache, will try iRODS. Error: %s", rel_path, ex)
         elif self._exists(obj, **kwargs):
             return self._get_size_in_irods(rel_path)
         log.warning("Did not find dataset '%s', returning 0 for size", rel_path)
@@ -504,6 +508,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         base_dir = kwargs.get('base_dir', None)
         dir_only = kwargs.get('dir_only', False)
         obj_dir = kwargs.get('obj_dir', False)
+
         try:
             # Remove temparory data in JOB_WORK directory
             if base_dir and dir_only and obj_dir:
@@ -523,6 +528,9 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
                     col = self.session.collections.get(col_path)
                 except CollectionDoesNotExist:
                     log.warn("Collection (%s) does not exist!", col_path)
+                    return False
+                except NetworkException as e:
+                    log.exception(e)
                     return False
 
                 cols = col.walk()
@@ -556,9 +564,13 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
                 except (DataObjectDoesNotExist, CollectionDoesNotExist):
                     log.info("Collection or data object (%s) does not exist", data_object_path)
                     return True
-
+                except NetworkException as e:
+                    log.exception(e)
+                    return False
         except OSError:
             log.exception('%s delete error', self._get_filename(obj, **kwargs))
+        except NetworkException as e:
+            log.exception(e)
         return False
 
     def _get_data(self, obj, start=0, count=-1, **kwargs):
@@ -567,7 +579,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
         if not self._in_cache(rel_path):
             self._pull_into_cache(rel_path)
         # Read the file content from cache
-        data_file = open(self._get_cache_path(rel_path), 'r')
+        data_file = open(self._get_cache_path(rel_path))
         data_file.seek(start)
         content = data_file.read(count)
         data_file.close()
@@ -615,7 +627,7 @@ class IRODSObjectStore(DiskObjectStore, CloudConfigMixin):
             self._create(obj, **kwargs)
         if self._exists(obj, **kwargs):
             rel_path = self._construct_path(obj, **kwargs)
-            # Chose whether to use the dataset file itself or an alternate file
+            # Choose whether to use the dataset file itself or an alternate file
             if file_name:
                 source_file = os.path.abspath(file_name)
                 # Copy into cache

@@ -42,7 +42,7 @@ The main test types are as follows:
 - Unit: These are Python unit tests either defined as doctests or inside of
    test/unit. These should generally not require a Galaxy instance and should
    quickly test just a component or a few components of Galaxy's backend code.
-- QUnit: These are JavaScript unit tests defined in client/galaxy/scripts/qunit.
+- QUnit: These are JavaScript unit tests defined in client/src/qunit.
 - Selenium: These are full stack tests meant to test the Galaxy UI with real
    browsers and are located in lib/galaxy_test/selenium.
 - ToolShed: These are web tests that use the older Python web testing
@@ -276,7 +276,13 @@ report_file="run_functional_tests.html"
 coverage_arg=""
 xunit_report_file=""
 structured_data_report_file=""
-skip_client_build="--skip-client-build"
+SKIP_CLIENT_BUILD=${GALAXY_SKIP_CLIENT_BUILD:-1}
+if [ "$SKIP_CLIENT_BUILD" = "1" ];
+then
+    skip_client_build="--skip-client-build"
+else
+    skip_client_build=""
+fi
 
 if [ "$1" = "--dockerize" ];
 then
@@ -387,7 +393,7 @@ do
           ;;
       -selenium|--selenium)
           GALAXY_TEST_TOOL_CONF="lib/galaxy/config/sample/tool_conf.xml.sample,test/functional/tools/samples_tool_conf.xml"
-          test_script="./scripts/functional_tests.py"
+          test_script="pytest"
           report_file="./run_selenium_tests.html"
           skip_client_build=""
           selenium_test=1;
@@ -611,8 +617,8 @@ setup_python
 if [ -n "$framework_test" -o -n "$installed_test" -o -n "$migrated_test" -o -n "$data_managers_test" ] ; then
     [ -n "$test_id" ] && selector="-k $test_id" || selector=""
     extra_args="test/functional/test_toolbox_pytest.py $selector $marker"
-elif [ -n "$selenium_test" ] ; then
-    extra_args="$selenium_script -selenium"
+elif [ -n "$selenium_script" ]; then
+    extra_args="$selenium_script"
 elif [ -n "$toolshed_script" ]; then
     extra_args="$toolshed_script"
 elif [ -n "$api_script" ]; then

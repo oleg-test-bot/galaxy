@@ -30,7 +30,7 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
     """
 
     def __init__(self, app):
-        super(ToolsController, self).__init__(app)
+        super().__init__(app)
         self.history_manager = managers.histories.HistoryManager(app)
         self.hda_manager = managers.hdas.HDAManager(app)
 
@@ -193,13 +193,25 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
         internals/Pythonisms in a rough way). If this endpoint is being used from outside
         of scripts shipped with Galaxy let us know and please be prepared for the response
         from this API to change its format in some ways.
+
+        If tool version is not passed, it is assumed to be latest. Tool version can be
+        set as '*' to get tests for all configured versions.
         """
-        # TODO: eliminate copy and paste with above code.
         if 'payload' in kwd:
             kwd = kwd.get('payload')
         tool_version = kwd.get('tool_version', None)
-        tool = self._get_tool(id, tool_version=tool_version, user=trans.user)
-        return [t.to_dict() for t in tool.tests]
+        if tool_version == "*":
+            tools = self.app.toolbox.get_tool(id, get_all_versions=True)
+            for tool in tools:
+                if not tool.allow_user_access(trans.user):
+                    raise exceptions.AuthenticationFailed("Access denied, please login for tool with id '%s'." % id)
+        else:
+            tools = [self._get_tool(id, tool_version=tool_version, user=trans.user)]
+
+        test_defs = []
+        for tool in tools:
+            test_defs.extend([t.to_dict() for t in tool.tests])
+        return test_defs
 
     @web.require_admin
     @expose_api
@@ -360,6 +372,7 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
         :return type: dict
         """
         tool_name_boost = self.app.config.get('tool_name_boost', 9)
+        tool_id_boost = self.app.config.get('tool_id_boost', 9)
         tool_section_boost = self.app.config.get('tool_section_boost', 3)
         tool_description_boost = self.app.config.get('tool_description_boost', 2)
         tool_label_boost = self.app.config.get('tool_label_boost', 1)
@@ -372,6 +385,7 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
 
         results = self.app.toolbox_search.search(q=q,
                                                  tool_name_boost=tool_name_boost,
+                                                 tool_id_boost=tool_id_boost,
                                                  tool_section_boost=tool_section_boost,
                                                  tool_description_boost=tool_description_boost,
                                                  tool_label_boost=tool_label_boost,
@@ -410,6 +424,8 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
         """Adapt clean API to tool-constrained API.
         """
         request_version = '1'
+        if "history_id" not in payload:
+            raise exceptions.RequestParameterMissingException("history_id must be specified")
         history_id = payload.pop("history_id")
         clean_payload = {}
         files_payload = {}
@@ -496,6 +512,8 @@ class ToolsController(BaseAPIController, UsesVisualizationMixin):
 
         # Set up inputs.
         inputs = payload.get('inputs', {})
+        if not isinstance(inputs, dict):
+            raise exceptions.RequestParameterInvalidException("inputs invalid %s" % inputs)
 
         # Find files coming in as multipart file data and add to inputs.
         for k, v in payload.items():

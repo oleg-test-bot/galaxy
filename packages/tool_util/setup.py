@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 import ast
 import os
@@ -32,6 +31,7 @@ TEST_DIR = 'tests'
 PACKAGES = [
     'galaxy',
     'galaxy.tool_util',
+    'galaxy.tool_util.client',
     'galaxy.tool_util.cwl',
     'galaxy.tool_util.deps',
     'galaxy.tool_util.deps.container_resolvers',
@@ -76,9 +76,7 @@ else:
     requirements = []
 
 
-test_requirements = [
-    # TODO: put package test requirements here
-]
+test_requirements = open("test-requirements.txt").read().split("\n")
 
 
 setup(
@@ -97,7 +95,12 @@ setup(
     include_package_data=True,
     install_requires=requirements,
     extras_require={
-        'condatesting': ['jinja2'],
+        'mulled': [
+            'conda',
+            'cytoolz',  # cytoolz is an undeclared dependency of the conda package on PyPI
+            'jinja2',
+            'Whoosh',
+        ],
     },
     license="AFL",
     zip_safe=False,
@@ -112,11 +115,11 @@ setup(
         'Topic :: Software Development :: Code Generators',
         'Topic :: Software Development :: Testing',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.5',
+        "Programming Language :: Python :: 3",
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
     test_suite=TEST_DIR,
     tests_require=test_requirements

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """ Clearing house for generic text datatypes that are not XML or tabular.
 """
 
@@ -7,10 +6,9 @@ import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import tempfile
-
-from six.moves import shlex_quote
 
 from galaxy.datatypes.data import get_file_peek, Text
 from galaxy.datatypes.metadata import MetadataElement, MetadataParameter
@@ -55,7 +53,7 @@ class Html(Text):
         True
         """
         headers = iter_headers(file_prefix, None)
-        for i, hdr in enumerate(headers):
+        for hdr in headers:
             if hdr and hdr[0].lower().find('<html>') >= 0:
                 return True
         return False
@@ -119,19 +117,25 @@ class ExpressionJson(Json):
     def set_meta(self, dataset, **kwd):
         """
         """
-        json_type = "null"
-        with open(dataset.file_name) as f:
-            obj = json.load(f)
-            if isinstance(obj, int):
-                json_type = "int"
-            elif isinstance(obj, float):
-                json_type = "float"
-            elif isinstance(obj, list):
-                json_type = "list"
-            elif isinstance(obj, dict):
-                json_type = "object"
-
-        dataset.metadata.json_type = json_type
+        if dataset.has_data():
+            json_type = "null"
+            file_path = dataset.file_name
+            try:
+                with open(file_path) as f:
+                    obj = json.load(f)
+                    if isinstance(obj, int):
+                        json_type = "int"
+                    elif isinstance(obj, float):
+                        json_type = "float"
+                    elif isinstance(obj, list):
+                        json_type = "list"
+                    elif isinstance(obj, dict):
+                        json_type = "object"
+            except json.decoder.JSONDecodeError:
+                with open(file_path) as f:
+                    contents = f.read(512)
+                raise Exception(f"Invalid JSON encountered {contents}")
+            dataset.metadata.json_type = json_type
 
 
 @build_sniff_from_prefix
@@ -167,7 +171,7 @@ class Ipynb(Json):
         if trust:
             return self._display_data_trusted(trans, dataset, preview=preview, filename=filename, to_ext=to_ext, **kwd)
         else:
-            return super(Ipynb, self).display_data(trans, dataset, preview=preview, filename=filename, to_ext=to_ext, **kwd)
+            return super().display_data(trans, dataset, preview=preview, filename=filename, to_ext=to_ext, **kwd)
 
     def _display_data_trusted(self, trans, dataset, preview=False, filename=None, to_ext=None, **kwd):
         preview = string_as_bool(preview)
@@ -182,14 +186,13 @@ class Ipynb(Json):
                 ofilename = '%s.html' % ofilename
             except subprocess.CalledProcessError:
                 ofilename = dataset.file_name
-                log.exception('Command "%s" failed. Could not convert the Jupyter Notebook to HTML, defaulting to plain text.', ' '.join(map(shlex_quote, cmd)))
+                log.exception('Command "%s" failed. Could not convert the Jupyter Notebook to HTML, defaulting to plain text.', ' '.join(map(shlex.quote, cmd)))
             return open(ofilename, mode='rb')
 
     def set_meta(self, dataset, **kwd):
         """
         Set the number of models in dataset.
         """
-        pass
 
 
 @build_sniff_from_prefix
@@ -215,7 +218,7 @@ class Biom1(Json):
     MetadataElement(name="table_column_metadata_headers", default=[], desc="table_column_metadata_headers", param=MetadataParameter, readonly=True, visible=True, optional=True, no_value=[])
 
     def set_peek(self, dataset, is_multi_byte=False):
-        super(Biom1, self).set_peek(dataset)
+        super().set_peek(dataset)
         if not dataset.dataset.purged:
             dataset.blurb = "Biological Observation Matrix v1"
 
@@ -234,7 +237,7 @@ class Biom1(Json):
         is_biom = False
         segment_size = int(load_size / 2)
         try:
-            with open(file_prefix.filename, "r") as fh:
+            with open(file_prefix.filename) as fh:
                 prev_str = ""
                 segment_str = fh.read(segment_size)
                 if segment_str.strip().startswith('{'):
@@ -295,7 +298,6 @@ class Biom1(Json):
                         setattr(dataset.metadata, m_name, metadata_value)
                     except Exception:
                         log.exception("Something in the metadata detection for biom1 went wrong.")
-                        pass
 
 
 @build_sniff_from_prefix
@@ -311,7 +313,7 @@ class ImgtJson(Json):
     """
 
     def set_peek(self, dataset, is_multi_byte=False):
-        super(ImgtJson, self).set_peek(dataset)
+        super().set_peek(dataset)
         if not dataset.dataset.purged:
             dataset.blurb = "IMGT Library"
 
@@ -340,7 +342,7 @@ class ImgtJson(Json):
         """
         is_imgt = False
         try:
-            with open(file_prefix.filename, "r") as fh:
+            with open(file_prefix.filename) as fh:
                 segment_str = fh.read(load_size)
                 if segment_str.strip().startswith('['):
                     if '"taxonId"' in segment_str and '"anchorPoints"' in segment_str:
@@ -358,7 +360,7 @@ class ImgtJson(Json):
                 try:
                     json_dict = json.load(fh)
                     tax_names = []
-                    for i, entry in enumerate(json_dict):
+                    for entry in json_dict:
                         if 'taxonId' in entry:
                             names = "%d: %s" % (entry['taxonId'], ','.join(entry['speciesNames']))
                             tax_names.append(names)
@@ -376,7 +378,7 @@ class GeoJson(Json):
     file_ext = "geojson"
 
     def set_peek(self, dataset, is_multi_byte=False):
-        super(GeoJson, self).set_peek(dataset)
+        super().set_peek(dataset)
         if not dataset.dataset.purged:
             dataset.blurb = "GeoJSON"
 
@@ -404,7 +406,7 @@ class GeoJson(Json):
         """
         is_geojson = False
         try:
-            with open(file_prefix.filename, "r") as fh:
+            with open(file_prefix.filename) as fh:
                 segment_str = fh.read(load_size)
                 if any(x in segment_str for x in ["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection"]):
                     if all(x in segment_str for x in ["type", "geometry", "coordinates"]):
@@ -468,7 +470,7 @@ class Arff(Text):
         if not dataset.dataset.purged:
             dataset.peek = get_file_peek(dataset.file_name)
             dataset.blurb = "Attribute-Relation File Format (ARFF)"
-            dataset.blurb += ", %s comments, %s attributes" % (dataset.metadata.comment_lines, dataset.metadata.columns)
+            dataset.blurb += f", {dataset.metadata.comment_lines} comments, {dataset.metadata.columns} attributes"
         else:
             dataset.peek = 'file does not exist'
             dataset.blurb = 'file purged from disc'
@@ -564,7 +566,7 @@ class SnpEffDb(Text):
     MetadataElement(name="annotation", default=[], desc="Annotation Names", readonly=True, visible=True, no_value=[], optional=True)
 
     def __init__(self, **kwd):
-        Text.__init__(self, **kwd)
+        super().__init__(**kwd)
 
     # The SnpEff version line was added in SnpEff version 4.1
     def getSnpeffVersionFromFile(self, path):
@@ -581,7 +583,7 @@ class SnpEffDb(Text):
         return snpeff_version
 
     def set_meta(self, dataset, **kwd):
-        Text.set_meta(self, dataset, **kwd)
+        super().set_meta(dataset, **kwd)
         data_dir = dataset.extra_files_path
         # search data_dir/genome_version for files
         regulation_pattern = 'regulation_(.+).bin'
@@ -592,7 +594,7 @@ class SnpEffDb(Text):
         genome_version = None
         snpeff_version = None
         if data_dir and os.path.isdir(data_dir):
-            for root, dirs, files in os.walk(data_dir):
+            for root, _, files in os.walk(data_dir):
                 for fname in files:
                     if fname.startswith('snpEffectPredictor'):
                         # if snpEffectPredictor.bin download succeeded
@@ -633,7 +635,6 @@ class SnpSiftDbNSFP(Text):
     MetadataElement(name="annotation", default=[], desc="Annotation Names", readonly=True, visible=True, no_value=[])
     file_ext = "snpsiftdbnsfp"
     composite_type = 'auto_primary_file'
-    allow_datatype_change = False
     """
     ## The dbNSFP file is a tabular file with 1 header line
     ## The first 4 columns are required to be: chrom	pos	ref	alt
@@ -647,12 +648,9 @@ class SnpSiftDbNSFP(Text):
     """
 
     def __init__(self, **kwd):
-        Text.__init__(self, **kwd)
+        super().__init__(**kwd)
         self.add_composite_file('%s.gz', description='dbNSFP bgzip', substitute_name_with_metadata='reference_name', is_binary=True)
         self.add_composite_file('%s.gz.tbi', description='Tabix Index File', substitute_name_with_metadata='reference_name', is_binary=True)
-
-    def init_meta(self, dataset, copy_from=None):
-        Text.init_meta(self, dataset, copy_from=copy_from)
 
     def generate_primary_file(self, dataset=None):
         """
@@ -678,7 +676,7 @@ class SnpSiftDbNSFP(Text):
             efp = dataset.extra_files_path
             if os.path.exists(efp):
                 flist = os.listdir(efp)
-                for i, fname in enumerate(flist):
+                for fname in flist:
                     if fname.endswith('.gz'):
                         dataset.metadata.bgzip = fname
                         try:
@@ -697,7 +695,7 @@ class SnpSiftDbNSFP(Text):
 
         def set_peek(self, dataset, is_multi_byte=False):
             if not dataset.dataset.purged:
-                dataset.peek = '%s :  %s' % (dataset.metadata.reference_name, ','.join(dataset.metadata.annotation))
+                dataset.peek = '{} :  {}'.format(dataset.metadata.reference_name, ','.join(dataset.metadata.annotation))
                 dataset.blurb = '%s' % dataset.metadata.reference_name
             else:
                 dataset.peek = 'file does not exist'

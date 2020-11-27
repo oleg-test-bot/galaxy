@@ -1,8 +1,7 @@
 import os
 import tempfile
 from contextlib import contextmanager
-
-import mock
+from unittest import mock
 
 from galaxy import model
 from galaxy.managers.jobs import JobManager
@@ -10,13 +9,14 @@ from galaxy.managers.markdown_util import (
     ready_galaxy_markdown_for_export,
     to_basic_markdown,
 )
+from galaxy.model.orm.now import now
 from .base import BaseTestCase
 
 
 class BaseExportTestCase(BaseTestCase):
 
     def setUp(self):
-        super(BaseExportTestCase, self).setUp()
+        super().setUp()
         self.app.hda_manager = mock.MagicMock()
         self.app.workflow_manager = mock.MagicMock()
         self.app.history_manager = mock.MagicMock()
@@ -32,6 +32,12 @@ class BaseExportTestCase(BaseTestCase):
             t.write(contents)
             hda.dataset.get_file_name.return_value = t.name
         return hda
+
+    def _new_invocation(self):
+        invocation = model.WorkflowInvocation()
+        invocation.id = 1
+        invocation.create_time = now()
+        return invocation
 
     @contextmanager
     def _expect_get_hda(self, hda, hda_id=1):
@@ -49,21 +55,20 @@ class BaseExportTestCase(BaseTestCase):
 
         collection = model.DatasetCollection()
         collection.id = 1
-        elements = []
         element_forward = model.DatasetCollectionElement(
+            collection=collection,
             element=hda_forward,
             element_index=0,
             element_identifier="forward",
         )
         element_forward.id = 1
         element_reverse = model.DatasetCollectionElement(
+            collection=collection,
             element=hda_reverse,
             element_index=0,
             element_identifier="reverse",
         )
         element_reverse.id = 2
-        elements = [element_forward, element_reverse]
-        collection.elements = elements
         collection.collection_type = "paired"
         return collection
 
@@ -71,11 +76,11 @@ class BaseExportTestCase(BaseTestCase):
 class ToBasicMarkdownTestCase(BaseExportTestCase):
 
     def setUp(self):
-        super(ToBasicMarkdownTestCase, self).setUp()
+        super().setUp()
         self.test_dataset_path = None
 
     def tearDown(self):
-        super(ToBasicMarkdownTestCase, self).tearDown()
+        super().tearDown()
         if self.test_dataset_path is not None:
             os.remove(self.test_dataset_path)
 
@@ -165,6 +170,30 @@ history_dataset_display(history_dataset_id=1)
             result = self._to_basic(example)
         assert '<table' in result
 
+    def test_dataset_name(self):
+        hda = self._new_hda()
+        hda.name = "cool name"
+        example = """# Example
+```galaxy
+history_dataset_name(history_dataset_id=1)
+```
+"""
+        with self._expect_get_hda(hda):
+            result = self._to_basic(example)
+        assert '\n    cool name' in result
+
+    def test_dataset_extension(self):
+        hda = self._new_hda()
+        hda.extension = "gtf"
+        example = """# Example
+```galaxy
+history_dataset_type(history_dataset_id=1)
+```
+"""
+        with self._expect_get_hda(hda):
+            result = self._to_basic(example)
+        assert '\n    gtf' in result
+
     def test_history_collection_paired(self):
         hdca = model.HistoryDatasetCollectionAssociation()
         hdca.name = "cool name"
@@ -202,6 +231,35 @@ workflow_display(workflow_id=1)
         result = self._to_basic(example)
         assert "**Workflow:** My Cool Workflow\n" in result
         assert "**Steps:**\n" in result
+
+    def test_galaxy_version(self):
+        example = """# Example
+```galaxy
+generate_galaxy_version()
+```
+"""
+        result = self._to_basic(example)
+        assert "\n    19.09" in result
+
+    def test_generate_time(self):
+        example = """# Example
+```galaxy
+generate_time()
+```
+"""
+        result = self._to_basic(example)
+        assert "\n    20" in result
+
+    def test_generate_invocation_time(self):
+        example = """# Example
+```galaxy
+invocation_time(invocation_id=1)
+```
+"""
+        invocation = self._new_invocation()
+        self.app.workflow_manager.get_invocation.side_effect = [invocation]
+        result = self._to_basic(example)
+        assert "\n    %s" % invocation.create_time.isoformat() in result
 
     def test_job_parameters(self):
         job = model.Job()
@@ -288,6 +346,7 @@ history_dataset_display(history_dataset_id=2)
         hdca.collection = self._new_pair_collection()
         hdca.id = 1
         hdca.history_id = 1
+        hdca.collection_id = hdca.collection.id
 
         self.trans.app.dataset_collections_service.get_dataset_collection_instance.return_value = hdca
         example = """# Example
@@ -301,6 +360,38 @@ history_dataset_collection_display(history_dataset_collection_id=1)
             export, extra_data = self._ready_export(example)
         assert "history_dataset_collections" in extra_data
         assert len(extra_data.get("history_dataset_collections")) == 1
+
+    def test_galaxy_version(self):
+        example = """# Example
+```galaxy
+generate_galaxy_version()
+```
+"""
+        result, extra_data = self._ready_export(example)
+        assert "generate_version" in extra_data
+        assert extra_data["generate_version"] == "19.09"
+
+    def test_generate_time(self):
+        example = """# Example
+```galaxy
+generate_time()
+```
+"""
+        result, extra_data = self._ready_export(example)
+        assert "generate_time" in extra_data
+
+    def test_get_invocation_time(self):
+        invocation = self._new_invocation()
+        self.app.workflow_manager.get_invocation.side_effect = [invocation]
+        example = """# Example
+```galaxy
+invocation_time(invocation_id=1)
+```
+"""
+        result, extra_data = self._ready_export(example)
+        assert "invocations" in extra_data
+        assert "create_time" in extra_data["invocations"]["be8be0fd2ce547f6"]
+        assert extra_data["invocations"]["be8be0fd2ce547f6"]["create_time"] == invocation.create_time.isoformat()
 
     def _ready_export(self, example):
         return ready_galaxy_markdown_for_export(self.trans, example)

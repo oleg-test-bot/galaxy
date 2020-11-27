@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 
 def parse_config_xml(config_xml):
     """Parse and validate config_xml, return dict for convenience
-    :param config_xml: (xml.etree.ElementTree.Element) root of XML subtree
+    :param config_xml: (lxml.etree.Element) root of XML subtree
     :returns: (dict) according to syntax
     :raises: various XML parse errors
     """
@@ -62,13 +62,13 @@ def parse_config_xml(config_xml):
         tag, attrs = 'extra_dir', ('type', 'path')
         extra_dirs = config_xml.findall(tag)
         if not extra_dirs:
-            msg = 'No {tag} element in XML tree'.format(tag=tag)
+            msg = f'No {tag} element in XML tree'
             log.error(msg)
             raise Exception(msg)
         r['extra_dirs'] = [
-            dict(((k, e.get(k)) for k in attrs)) for e in extra_dirs]
+            {k: e.get(k) for k in attrs} for e in extra_dirs]
         if 'job_work' not in (d['type'] for d in r['extra_dirs']):
-            msg = 'No value for {0}:type="job_work" in XML tree'.format(tag)
+            msg = f'No value for {tag}:type="job_work" in XML tree'
             log.error(msg)
             raise Exception(msg)
     except Exception:
@@ -87,7 +87,7 @@ class PithosObjectStore(ConcreteObjectStore):
     store_type = 'pithos'
 
     def __init__(self, config, config_dict):
-        super(PithosObjectStore, self).__init__(config, config_dict)
+        super().__init__(config, config_dict)
         self.staging_path = self.config.file_path
         log.info('Parse config_xml for pithos object store')
         self.config_dict = config_dict
@@ -109,7 +109,7 @@ class PithosObjectStore(ConcreteObjectStore):
         return parse_config_xml(config_xml)
 
     def to_dict(self):
-        as_dict = super(PithosObjectStore, self).to_dict()
+        as_dict = super().to_dict()
         as_dict.update(self.config_dict)
         return as_dict
 
@@ -150,20 +150,20 @@ class PithosObjectStore(ConcreteObjectStore):
         # param extra_dir: should never be constructed from provided data but
         # just make sure there are no shenannigans afoot
         if extra_dir and extra_dir != os.path.normpath(extra_dir):
-            log.warning('extra_dir is not normalized: {0}'.format(extra_dir))
+            log.warning(f'extra_dir is not normalized: {extra_dir}')
             raise ObjectInvalid("The requested object is invalid")
         # ensure that any parent directory references in alt_name would not
         # result in a path not contained in the directory path constructed here
         if alt_name:
             if not safe_relpath(alt_name):
                 log.warning(
-                    'alt_name would locate path outside dir: {0}'.format(
+                    'alt_name would locate path outside dir: {}'.format(
                         alt_name))
                 raise ObjectInvalid("The requested object is invalid")
             # alt_name can contain parent directory references, but S3 will not
             # follow them, so if they are valid we normalize them out
             alt_name = os.path.normpath(alt_name)
-        rel_path = os.path.join(*directory_hash_id(obj.id))
+        rel_path = os.path.join(*directory_hash_id(self._get_object_id(obj)))
         if extra_dir is not None:
             if extra_dir_at_root:
                 rel_path = os.path.join(extra_dir, rel_path)
@@ -172,16 +172,16 @@ class PithosObjectStore(ConcreteObjectStore):
 
         # for JOB_WORK directory
         if obj_dir:
-            rel_path = os.path.join(rel_path, str(obj.id))
+            rel_path = os.path.join(rel_path, str(self._get_object_id(obj)))
         if base_dir:
             base = self.extra_dirs.get(base_dir)
             return os.path.join(base, rel_path)
 
         # Pithos+ folders are marked by having trailing '/' so add it now
-        rel_path = '{0}/'.format(rel_path)
+        rel_path = f'{rel_path}/'
 
         if not dir_only:
-            an = alt_name if alt_name else 'dataset_{0}.dat'.format(obj.id)
+            an = alt_name if alt_name else 'dataset_{}.dat'.format(self._get_object_id(obj))
             rel_path = os.path.join(rel_path, an)
         return rel_path
 
@@ -263,7 +263,7 @@ class PithosObjectStore(ConcreteObjectStore):
             alt_name = kwargs.get('alt_name', None)
 
             # Construct hashed path
-            rel_path = os.path.join(*directory_hash_id(obj.id))
+            rel_path = os.path.join(*directory_hash_id(self._get_object_id(obj)))
 
             # Optionally append extra_dir
             if extra_dir is not None:
@@ -283,7 +283,7 @@ class PithosObjectStore(ConcreteObjectStore):
             else:
                 rel_path = os.path.join(
                     rel_path,
-                    alt_name if alt_name else 'dataset_{0}.dat'.format(obj.id))
+                    alt_name if alt_name else 'dataset_{}.dat'.format(self._get_object_id(obj)))
                 new_file = os.path.join(self.staging_path, rel_path)
                 open(new_file, 'w').close()
                 self.pithos.upload_from_string(rel_path, '')
@@ -339,7 +339,7 @@ class PithosObjectStore(ConcreteObjectStore):
             extra_dir = kwargs.get('extra_dir', False)
             if entire_dir and extra_dir:
                 shutil.rmtree(cache_path)
-                log.debug('On Pithos: delete -r {path}/'.format(path=path))
+                log.debug(f'On Pithos: delete -r {path}/')
                 self.pithos.del_object(path, delimiter='/')
                 return True
             else:
@@ -347,7 +347,7 @@ class PithosObjectStore(ConcreteObjectStore):
                 self.pithos.del_object(path)
         except OSError:
             log.exception(
-                '{0} delete error'.format(self._get_filename(obj, **kwargs)))
+                '{} delete error'.format(self._get_filename(obj, **kwargs)))
         except ClientError as ce:
             log.exception('Could not delete {path} from Pithos, {err}'.format(
                 path=path, err=ce))
@@ -363,7 +363,7 @@ class PithosObjectStore(ConcreteObjectStore):
             cache_path = self._pull_into_cache(path)
         else:
             cache_path = self._get_cache_path(path)
-        data_file = open(cache_path, 'r')
+        data_file = open(cache_path)
         data_file.seek(start)
         content = data_file.read(count)
         data_file.close()
@@ -392,7 +392,7 @@ class PithosObjectStore(ConcreteObjectStore):
                 return cache_path
         raise ObjectNotFound(
             'objectstore.get_filename, no cache_path: {obj}, '
-            'kwargs: {kwargs}'.format(obj, kwargs))
+            'kwargs: {kwargs}'.format(obj=obj, kwargs=kwargs))
 
     def _update_from_file(self, obj, **kwargs):
         """Update the store when a file is updated"""
@@ -401,7 +401,7 @@ class PithosObjectStore(ConcreteObjectStore):
         if not self._exists(obj, **kwargs):
             raise ObjectNotFound(
                 'objectstore.update_from_file, object does not exist: {obj}, '
-                'kwargs: {kwargs}'.format(obj, kwargs))
+                'kwargs: {kwargs}'.format(obj=obj, kwargs=kwargs))
 
         path = self._construct_path(obj, **kwargs)
         cache_path = self._get_cache_path(path)
@@ -430,8 +430,8 @@ class PithosObjectStore(ConcreteObjectStore):
                 return self.pithos.publish_object(path)
             except ClientError as ce:
                 log.exception(
-                    'Trouble generating URL for dataset "{}"'.format(path))
-                log.exception('Kamaki: {0}'.format(ce))
+                    f'Trouble generating URL for dataset "{path}"')
+                log.exception(f'Kamaki: {ce}')
         return None
 
     def _get_store_usage_percent(self):
