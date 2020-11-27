@@ -11,7 +11,7 @@
         </b-link>
         <b-collapse id="collapse-about" class="mt-2" v-model="expanded">
             <b-card>
-                <div v-if="hasCitations" class="metadata-section">
+                <div v-if="citations.length > 0" class="metadata-section">
                     <span class="metadata-key">Citations:</span>
                     <font-awesome-icon
                         v-b-tooltip.hover
