@@ -5,7 +5,7 @@
             :aria-expanded="expanded"
             aria-controls="collapse-about"
             class="collapse-about"
-            @click="expanded = !expanded"
+            @click="expanded  = !expanded"
             >About this tool
             <font-awesome-icon :icon="expanded ? 'angle-double-up' : 'angle-double-down'" />
         </b-link>
