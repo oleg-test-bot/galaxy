@@ -1,6 +1,6 @@
 <template>
     <div>
-asd
+123123123
         <span v-html="citationHtml" />
         <a v-if="link" :href="link" target="_blank">
             <font-awesome-icon v-b-tooltip.hover title="View Citation" icon="external-link-alt" />
